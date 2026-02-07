@@ -1,45 +1,29 @@
--- [[ BLEACH-OS BRIDGE MODIFIED ]]
-local HttpService = game:GetService("HttpService")
-local bridgeURL = "wss://your-project-name.onrender.com" -- CHANGE THIS TO YOUR URL
-local ws = WebSocket.connect(bridgeURL)
+const WebSocket = require('ws');
+const http = require('http');
 
--- (Keep your original variables/functions here: alignToHead, lp, etc.)
+// Create a simple server
+const server = http.createServer((req, res) => {
+    res.writeHead(200);
+    res.end("Bridge is Active");
+});
 
--- 3. GLOBAL SYNC LISTENER (Receives from other servers)
-ws.OnMessage:Connect(function(msg)
-    local data = HttpService:JSONDecode(msg)
-    
-    if data.keyword == "DevHatSync" then
-        local senderName = data.sender
-        local hatName = data.hatName
-        local senderPlayer = Players:FindFirstChild(senderName)
-        
-        if senderPlayer and senderPlayer ~= lp and senderPlayer.Character then
-            local targetHat = devHats:FindFirstChild(hatName)
-            if targetHat then
-                -- Clear old synced hats
-                for _, v in pairs(senderPlayer.Character:GetDescendants()) do
-                    if v.Name == "AccessoryWeld" then v.Parent.Parent:Destroy() end
-                end
-                alignToHead(senderPlayer.Character, targetHat:Clone())
-            end
-        end
-    end
-end)
+const wss = new WebSocket.Server({ server });
 
--- 6. MANUAL EQUIP (Now sends to the Bridge)
-local function manualEquip(hat)
-    local char = lp.Character
-    if not char or not char:FindFirstChild("Head") then return end
-    
-    -- BROADCAST to the Bridge
-    local syncData = {
-        keyword = "DevHatSync",
-        sender = lp.Name,
-        hatName = hat.Name
-    }
-    ws:Send(HttpService:JSONEncode(syncData))
+wss.on('connection', (ws) => {
+    console.log("A user connected to the Sync Bridge.");
 
-    -- ALIGN locally
-    alignToHead(char, hat:Clone())
-end
+    ws.on('message', (message) => {
+        // When we get a hat sync message, send it to EVERYONE else
+        wss.clients.forEach((client) => {
+            if (client !== ws && client.readyState === WebSocket.OPEN) {
+                client.send(message.toString());
+            }
+        });
+    });
+
+    ws.on('close', () => console.log("User disconnected."));
+});
+
+server.listen(process.env.PORT || 3000, () => {
+    console.log("Relay Bridge Running...");
+});
