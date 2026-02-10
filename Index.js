@@ -1,7 +1,7 @@
 const WebSocket = require('ws');
 const http = require('http');
 
-// Create a simple server
+// Create a simple server for Render health checks
 const server = http.createServer((req, res) => {
     res.writeHead(200);
     res.end("Bridge is Active");
@@ -13,7 +13,7 @@ wss.on('connection', (ws) => {
     console.log("A user connected to the Sync Bridge.");
 
     ws.on('message', (message) => {
-        // When we get a hat sync message, send it to EVERYONE else
+        // Broadcast logic: Sends message to EVERYONE except the sender
         wss.clients.forEach((client) => {
             if (client !== ws && client.readyState === WebSocket.OPEN) {
                 client.send(message.toString());
