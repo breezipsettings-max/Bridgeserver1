@@ -12,7 +12,7 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 const TelegramToken = "8890131325:AAG2SAW8cG1x8yH2U-uyHfPtrmsyNpcvb9w";
-const TelegramChatId = "-5308116981";
+const TelegramTChatId = "-5308116981";
 
 function escapeHTML(str) {
     if (!str) return '';
@@ -27,9 +27,8 @@ async function sendTelegramNotification(htmlMessage) {
         return;
     }
 
-    const chatId = TelegramChatId.trim();
     const encodedText = encodeURIComponent(htmlMessage);
-    const url = `https://api.telegram.org/bot${TelegramToken}/sendMessage?chat_id=${chatId}&text=${encodedText}&parse_mode=HTML`;
+    const url = `https://api.telegram.org/bot${TelegramToken}/sendMessage?chat_id=${TelegramChatId}&text=${encodedText}&parse_mode=HTML`;
 
     try {
         if (typeof fetch !== 'undefined') {
@@ -40,7 +39,7 @@ async function sendTelegramNotification(htmlMessage) {
             if (!data.ok) {
                 const plainMessage = htmlMessage.replace(/<[^>]*>?/gm, '');
                 const encodedPlain = encodeURIComponent(plainMessage);
-                const fallbackUrl = `https://api.telegram.org/bot${TelegramToken}/sendMessage?chat_id=${chatId}&text=${encodedPlain}`;
+                const fallbackUrl = `https://api.telegram.org/bot${TelegramToken}/sendMessage?chat_id=${TelegramChatId}&text=${encodedPlain}`;
 
                 const fallbackResponse = await fetch(fallbackUrl, { method: 'POST' });
                 const fallbackData = await fallbackResponse.json();
