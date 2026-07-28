@@ -154,33 +154,35 @@ app.post('/telegram-webhook', async (req, res) => {
             await sendTelegramNotification(responseMessage, chatId);
         }
 
-        const broadcastPayload = {
-            Type: "TelegramCommand",
-            Command: commandName,
-            Sender: senderName,
-            UserId: senderUserId,
-            Message: telegramText,
-            Payload: commandPayload,
-            TargetUser: targetUser,
-            ReplyText: replyText
-        };
+        if (commandName !== "start") {
+            const broadcastPayload = {
+                Type: "TelegramCommand",
+                Command: commandName,
+                Sender: senderName,
+                UserId: senderUserId,
+                Message: telegramText,
+                Payload: commandPayload,
+                TargetUser: targetUser,
+                ReplyText: replyText
+            };
 
-        console.log("Broadcasting command to Roblox clients:", broadcastPayload);
+            console.log("Broadcasting command to Roblox clients:", broadcastPayload);
 
-        wss.clients.forEach((client) => {
-            if (client.readyState === WebSocket.OPEN) {
-                client.send(JSON.stringify(broadcastPayload));
-            }
-        });
-
-        try {
-            await fetch(`${SECONDARY_URL}/push-to-roblox`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(broadcastPayload)
+            wss.clients.forEach((client) => {
+                if (client.readyState === WebSocket.OPEN) {
+                    client.send(JSON.stringify(broadcastPayload));
+                }
             });
-        } catch (err) {
-            console.error("Failed to push command to Server 2:", err.message);
+
+            try {
+                await fetch(`${SECONDARY_URL}/push-to-roblox`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(broadcastPayload)
+                });
+            } catch (err) {
+                console.error("Failed to push command to Server 2:", err.message);
+            }
         }
     }
 });
