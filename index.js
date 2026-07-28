@@ -36,8 +36,6 @@ app.get('/', (req, res) => {
 });
 
 app.post('/send-to-telegram', async (req, res) => {
-    console.log("Received /send-to-telegram request from Server 1:", req.body);
-    
     const { playerName, userId, message } = req.body;
     const safeName = escapeHTML(playerName);
     const safeUserId = escapeHTML(String(userId));
