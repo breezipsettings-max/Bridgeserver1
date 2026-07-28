@@ -56,11 +56,16 @@ app.get('/', (req, res) => {
 
 app.post('/push-to-roblox', (req, res) => {
     const senderName = req.body.playerName || req.body.Sender;
+    const targetUser = req.body.TargetUser;
     const broadcastPayload = JSON.stringify(req.body);
     wss.clients.forEach((client) => {
         if (client.readyState === WebSocket.OPEN) {
             if (client.playerName !== senderName) {
-                client.send(broadcastPayload);
+                if (targetUser) {
+                    if (client.playerName === targetUser || String(client.userId) === String(targetUser)) {
+                        client.send(broadcastPayload);
+                    }
+                }
             }
         }
     });
@@ -154,7 +159,8 @@ app.post('/telegram-webhook', async (req, res) => {
             await sendTelegramNotification(responseMessage, chatId);
         }
 
-        if (commandName !== "start") {
+        // Only send targeted replies to the specific client to prevent leaking admin commands to clients
+        if (commandName === "reply" && targetUser) {
             const broadcastPayload = {
                 Type: "TelegramCommand",
                 Command: commandName,
@@ -166,11 +172,13 @@ app.post('/telegram-webhook', async (req, res) => {
                 ReplyText: replyText
             };
 
-            console.log("Broadcasting command to Roblox clients:", broadcastPayload);
+            console.log("Broadcasting targeted command to Roblox client:", broadcastPayload);
 
             wss.clients.forEach((client) => {
                 if (client.readyState === WebSocket.OPEN) {
-                    client.send(JSON.stringify(broadcastPayload));
+                    if (client.playerName === targetUser || String(client.userId) === String(targetUser)) {
+                        client.send(JSON.stringify(broadcastPayload));
+                    }
                 }
             });
 
