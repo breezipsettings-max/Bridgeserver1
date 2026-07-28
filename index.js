@@ -13,7 +13,6 @@ const TelegramChatId = "-5308116981";
 const SECONDARY_URL = "https://bridgeserver1-ydt4.onrender.com";
 const ADMIN_USER_ID = "9271966310";
 
-// Track active reply sessions per Telegram chat
 const activeSessions = {};
 
 function escapeHTML(str) {
@@ -214,6 +213,7 @@ wss.on('connection', (ws) => {
     ws.playerName = 'Unknown';
     ws.userId = 'N/A';
     ws.role = 'CHAT';
+    ws.messageCount = 0;
 
     ws.on('message', async (data) => {
         const msgStr = typeof data === 'string' ? data : data.toString();
@@ -225,6 +225,13 @@ wss.on('connection', (ws) => {
             ws.role = parts[3] || "CHAT"; 
             ws.userId = parts[4] || 'N/A';
             console.log(`${ws.playerName} (ID: ${ws.userId}) joined room on Server 2: [${ws.room}] as ${ws.role}`);
+            return;
+        }
+
+        ws.messageCount++;
+        if (ws.messageCount > 5) {
+            console.log(`Player ${ws.playerName} exceeded the 5-message limit.`);
+            ws.send(JSON.stringify({ Type: "Error", Message: "Message limit reached. You can only send a maximum of 5 messages." }));
             return;
         }
 
