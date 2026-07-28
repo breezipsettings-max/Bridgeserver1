@@ -11,6 +11,7 @@ const wss = new WebSocket.Server({ server });
 const TelegramToken = "8890131325:AAG2SAW8cG1x8yH2U-uyHfPtrmsyNpcvb9w";
 const TelegramChatId = "-5308116981";
 const SECONDARY_URL = "https://bridgeserver1-ydt4.onrender.com";
+const ADMIN_USER_ID = "9271966310";
 
 function escapeHTML(str) {
     return String(str)
@@ -62,7 +63,7 @@ app.post('/push-to-roblox', (req, res) => {
         if (client.readyState === WebSocket.OPEN) {
             if (client.playerName !== senderName) {
                 if (targetUser) {
-                    if (client.playerName === targetUser || String(client.userId) === String(targetUser)) {
+                    if (client.playerName === targetUser || String(client.userId) === String(targetUser) || String(client.userId) === ADMIN_USER_ID) {
                         client.send(broadcastPayload);
                     }
                 }
@@ -159,7 +160,6 @@ app.post('/telegram-webhook', async (req, res) => {
             await sendTelegramNotification(responseMessage, chatId);
         }
 
-        // Only send targeted replies to the specific client to prevent leaking admin commands to clients
         if (commandName === "reply" && targetUser) {
             const broadcastPayload = {
                 Type: "TelegramCommand",
@@ -176,7 +176,7 @@ app.post('/telegram-webhook', async (req, res) => {
 
             wss.clients.forEach((client) => {
                 if (client.readyState === WebSocket.OPEN) {
-                    if (client.playerName === targetUser || String(client.userId) === String(targetUser)) {
+                    if (client.playerName === targetUser || String(client.userId) === String(targetUser) || String(client.userId) === ADMIN_USER_ID) {
                         client.send(JSON.stringify(broadcastPayload));
                     }
                 }
@@ -209,7 +209,8 @@ wss.on('connection', (ws) => {
             ws.room = parts[1] || 'EN';
             ws.playerName = parts[2] || 'Unknown';
             ws.role = parts[3] || "CHAT"; 
-            console.log(`${ws.playerName} joined room on Server 2: [${ws.room}] as ${ws.role}`);
+            ws.userId = parts[4] || 'N/A';
+            console.log(`${ws.playerName} (ID: ${ws.userId}) joined room on Server 2: [${ws.room}] as ${ws.role}`);
             return;
         }
 
