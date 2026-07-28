@@ -1,10 +1,17 @@
 const express = require('express');
+const http = require('http');
+const WebSocket = require('ws');
+
 const app = express();
 app.use(express.json());
+
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
 
 const TelegramToken = "8890131325:AAG2SAW8cG1x8yH2U-uyHfPtrmsyNpcvb9w";
 const TelegramChatId = "-5308116981";
 const PRIMARY_URL = "https://bridgeserver-0xlb.onrender.com";
+const SECONDARY_URL = "https://bridgeserver1-ydt4.onrender.com";
 
 function escapeHTML(str) {
     return String(str)
@@ -45,7 +52,17 @@ async function sendTelegramNotification(htmlMessage) {
 }
 
 app.get('/', (req, res) => {
-    res.send('Server 2 (Secondary Telegram Broadcaster) Online');
+    res.send('Server 2 (Backup WS & Telegram Broadcaster) Online');
+});
+
+app.post('/push-to-roblox', (req, res) => {
+    const broadcastPayload = JSON.stringify(req.body);
+    wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(broadcastPayload);
+        }
+    });
+    res.sendStatus(200);
 });
 
 app.post('/send-to-telegram', async (req, res) => {
@@ -108,6 +125,14 @@ app.post('/telegram-webhook', async (req, res) => {
             ReplyText: replyText
         };
 
+        // Broadcast locally to any clients connected to Server 2
+        wss.clients.forEach((client) => {
+            if (client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify(broadcastPayload));
+            }
+        });
+
+        // Backup sync forward to Primary Server
         try {
             await fetch(`${PRIMARY_URL}/push-to-roblox`, {
                 method: 'POST',
@@ -122,7 +147,71 @@ app.post('/telegram-webhook', async (req, res) => {
     res.sendStatus(200);
 });
 
+wss.on('connection', (ws) => {
+    ws.room = 'EN';
+    ws.playerName = 'Unknown';
+    ws.userId = 'N/A';
+    ws.role = 'CHAT';
+
+    ws.on('message', async (data) => {
+        const msgStr = typeof data === 'string' ? data : data.toString();
+
+        if (msgStr.startsWith("JOIN:")) {
+            const parts = msgStr.split(":");
+            ws.room = parts[1] || 'EN';
+            ws.playerName = parts[2] || 'Unknown';
+            ws.role = parts[3] || "CHAT"; 
+            console.log(`${ws.playerName} joined room on Server 2: [${ws.room}] as ${ws.role}`);
+            return;
+        }
+
+        if (msgStr.includes("TelegramBroadcast") || msgStr.includes("ObsidianSuggest") || msgStr.includes("suggestion")) {
+            try {
+                let packet;
+                try {
+                    packet = JSON.parse(msgStr);
+                } catch (parseErr) {
+                    packet = { 
+                        Message: msgStr, 
+                        PlayerName: ws.playerName, 
+                        UserId: ws.userId 
+                    };
+                }
+
+                const messageText = packet.Message || packet.Suggestion || packet.Text || msgStr;
+                const rawName = packet.PlayerName || ws.playerName || 'Unknown';
+                const safeUserId = String(packet.UserId || ws.userId || 'N/A');
+
+                console.log(`Forwarding message from ${rawName} to Telegram via Server 2...`);
+
+                const forwardRes = await fetch(`${SECONDARY_URL}/send-to-telegram`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        playerName: rawName,
+                        userId: safeUserId,
+                        message: messageText
+                    })
+                });
+
+                if (!forwardRes.ok) {
+                    console.error(`Server 2 send-to-telegram returned status: ${forwardRes.status}`);
+                }
+            } catch (e) {
+                console.error("CRITICAL ERROR in Server 2 WebSocket forwarder:", e);
+            }
+            return;
+        }
+
+        wss.clients.forEach((client) => {
+            if (client.readyState === WebSocket.OPEN && client.room === ws.room) {
+                client.send(msgStr);
+            }
+        });
+    });
+});
+
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => {
-    console.log(`Server 2 (Secondary Telegram Broadcaster) running on port ${PORT}`);
+server.listen(PORT, () => {
+    console.log(`Server 2 (Backup WS & Telegram Broadcaster) running on port ${PORT}`);
 });
