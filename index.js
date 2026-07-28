@@ -56,10 +56,13 @@ app.get('/', (req, res) => {
 });
 
 app.post('/push-to-roblox', (req, res) => {
+    const senderName = req.body.playerName || req.body.Sender;
     const broadcastPayload = JSON.stringify(req.body);
     wss.clients.forEach((client) => {
         if (client.readyState === WebSocket.OPEN) {
-            client.send(broadcastPayload);
+            if (client.playerName !== senderName) {
+                client.send(broadcastPayload);
+            }
         }
     });
     res.sendStatus(200);
@@ -125,14 +128,12 @@ app.post('/telegram-webhook', async (req, res) => {
             ReplyText: replyText
         };
 
-        // Broadcast locally to any clients connected to Server 2
         wss.clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN) {
                 client.send(JSON.stringify(broadcastPayload));
             }
         });
 
-        // Backup sync forward to Primary Server
         try {
             await fetch(`${PRIMARY_URL}/push-to-roblox`, {
                 method: 'POST',
