@@ -19,12 +19,12 @@ function escapeHTML(str) {
         .replace(/>/g, '&gt;');
 }
 
-async function sendTelegramNotification(htmlMessage) {
-    if (!TelegramToken || !TelegramChatId) {
+async function sendTelegramNotification(htmlMessage, targetChatId = TelegramChatId) {
+    if (!TelegramToken || !targetChatId) {
         console.error("Telegram Token or Chat ID is missing!");
         return;
     }
-    const chatId = TelegramChatId.trim();
+    const chatId = String(targetChatId).trim();
     let url = `https://api.telegram.org/bot${TelegramToken}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(htmlMessage)}&parse_mode=HTML`;
 
     try {
@@ -84,11 +84,14 @@ app.post('/send-to-telegram', async (req, res) => {
 });
 
 app.post('/telegram-webhook', async (req, res) => {
+    res.sendStatus(200);
+
     const update = req.body;
     console.log("Incoming Telegram Webhook Update:", JSON.stringify(update));
 
     if (update && update.message && update.message.text) {
         const message = update.message;
+        const chatId = message.chat.id;
         const firstName = message.from.first_name || "Admin";
         const lastName = message.from.last_name || "";
         const senderName = `${firstName} ${lastName}`.trim();
@@ -118,6 +121,37 @@ app.post('/telegram-webhook', async (req, res) => {
         } else if (commandName === "start" && (commandPayload.startsWith("reply=") || commandPayload.startsWith("reply_"))) {
             targetUser = commandPayload.replace("reply=", "").replace("reply_", "").trim();
             replyText = "Reply session initialized for user ID " + targetUser;
+        } else if (commandName === "end" || commandName === "stop" || commandName === "close") {
+            const payloadParts = commandPayload.trim().split(" ");
+            targetUser = payloadParts[0] || "";
+            replyText = "Reply session ended.";
+        }
+
+        let responseMessage = "";
+        if (commandName === "start") {
+            if (targetUser) {
+                responseMessage = `✅ Reply session active for user ID: <b><code>${escapeHTML(targetUser)}</code></b>.\nType your message to send it.`;
+            } else {
+                responseMessage = `🤖 <b>Obsidian Warden Bot Online</b>\nServer operational status is normal.`;
+            }
+        } else if (commandName === "instructionshowtoreply") {
+            responseMessage = `📖 <b>How to Reply to Roblox Players:</b>\n\n1. Click the link on any suggestion/broadcast notification.\n2. Or manually type: <code>/reply [UserId] [Your Message]</code>\n3. Type <code>/end [UserId]</code> to close the session.`;
+        } else if (commandName === "reply") {
+            if (targetUser && replyText) {
+                responseMessage = `📤 Reply dispatched to user ID <b><code>${escapeHTML(targetUser)}</code></b>: "${escapeHTML(replyText)}"`;
+            } else {
+                responseMessage = `⚠️ Usage error. Format: <code>/reply [UserId] [Message]</code>`;
+            }
+        } else if (commandName === "end" || commandName === "stop" || commandName === "close") {
+            if (targetUser) {
+                responseMessage = `🛑 Reply session closed for user ID: <b><code>${escapeHTML(targetUser)}</code></b>.`;
+            } else {
+                responseMessage = `🛑 Reply session ended.`;
+            }
+        }
+
+        if (responseMessage) {
+            await sendTelegramNotification(responseMessage, chatId);
         }
 
         const broadcastPayload = {
@@ -149,8 +183,6 @@ app.post('/telegram-webhook', async (req, res) => {
             console.error("Failed to push command to Server 2:", err.message);
         }
     }
-
-    res.sendStatus(200);
 });
 
 wss.on('connection', (ws) => {
