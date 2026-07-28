@@ -13,6 +13,9 @@ const TelegramChatId = "-5308116981";
 const SECONDARY_URL = "https://bridgeserver1-ydt4.onrender.com";
 const ADMIN_USER_ID = "9271966310";
 
+// Track active reply sessions per Telegram chat
+const activeSessions = {};
+
 function escapeHTML(str) {
     return String(str)
         .replace(/&/g, '&amp;')
@@ -117,20 +120,33 @@ app.post('/telegram-webhook', async (req, res) => {
             commandPayload = parts.slice(1).join(" ");
         }
 
-        let targetUser = "";
+        let targetUser = activeSessions[chatId] || "";
         let replyText = commandPayload;
+        let shouldBroadcast = false;
 
         if (commandName === "reply") {
             const payloadParts = commandPayload.trim().split(" ");
             targetUser = payloadParts[0] || "";
             replyText = payloadParts.slice(1).join(" ") || "";
+            if (targetUser) {
+                activeSessions[chatId] = targetUser;
+                shouldBroadcast = true;
+            }
         } else if (commandName === "start" && (commandPayload.startsWith("reply=") || commandPayload.startsWith("reply_"))) {
             targetUser = commandPayload.replace("reply=", "").replace("reply_", "").trim();
+            if (targetUser) {
+                activeSessions[chatId] = targetUser;
+            }
             replyText = "Reply session initialized for user ID " + targetUser;
         } else if (commandName === "end" || commandName === "stop" || commandName === "close") {
             const payloadParts = commandPayload.trim().split(" ");
-            targetUser = payloadParts[0] || "";
+            targetUser = payloadParts[0] || activeSessions[chatId] || "";
+            delete activeSessions[chatId];
             replyText = "Reply session ended.";
+        } else if (!commandName && activeSessions[chatId]) {
+            targetUser = activeSessions[chatId];
+            replyText = telegramText;
+            shouldBroadcast = true;
         }
 
         let responseMessage = "";
@@ -149,21 +165,19 @@ app.post('/telegram-webhook', async (req, res) => {
                 responseMessage = `⚠️ Usage error. Format: <code>/reply [UserId] [Message]</code>`;
             }
         } else if (commandName === "end" || commandName === "stop" || commandName === "close") {
-            if (targetUser) {
-                responseMessage = `🛑 Reply session closed for user ID: <b><code>${escapeHTML(targetUser)}</code></b>.`;
-            } else {
-                responseMessage = `🛑 Reply session ended.`;
-            }
+            responseMessage = `🛑 Reply session closed.`;
+        } else if (shouldBroadcast && targetUser) {
+            responseMessage = `📤 Sent to Roblox (ID ${targetUser}): "${escapeHTML(replyText)}"`;
         }
 
         if (responseMessage) {
             await sendTelegramNotification(responseMessage, chatId);
         }
 
-        if (commandName === "reply" && targetUser) {
+        if (shouldBroadcast && targetUser) {
             const broadcastPayload = {
                 Type: "TelegramCommand",
-                Command: commandName,
+                Command: commandName || "text_reply",
                 Sender: senderName,
                 UserId: senderUserId,
                 Message: telegramText,
