@@ -14,20 +14,33 @@ function escapeHTML(str) {
 }
 
 async function sendTelegramNotification(htmlMessage) {
-    if (!TelegramToken || !TelegramChatId) return;
+    if (!TelegramToken || !TelegramChatId) {
+        console.error("Telegram Token or Chat ID is missing!");
+        return;
+    }
     const chatId = TelegramChatId.trim();
     let url = `https://api.telegram.org/bot${TelegramToken}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(htmlMessage)}&parse_mode=HTML`;
 
     try {
         const response = await fetch(url, { method: 'POST' });
         const data = await response.json();
+        
         if (!data.ok) {
+            console.error("Telegram API rejected HTML message:", data);
             const plainMessage = htmlMessage.replace(/<[^>]*>?/gm, '');
             let fallbackUrl = `https://api.telegram.org/bot${TelegramToken}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(plainMessage)}`;
-            await fetch(fallbackUrl, { method: 'POST' });
+            
+            const fallbackResponse = await fetch(fallbackUrl, { method: 'POST' });
+            const fallbackData = await fallbackResponse.json();
+            
+            if (!fallbackData.ok) {
+                console.error("Telegram API fallback also failed:", fallbackData);
+            }
+        } else {
+            console.log("Telegram message sent successfully!");
         }
     } catch (err) {
-        console.error("Telegram Dispatch Error:", err.message);
+        console.error("Telegram Dispatch Network Error:", err);
     }
 }
 
