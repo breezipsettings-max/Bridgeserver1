@@ -10,7 +10,6 @@ const wss = new WebSocket.Server({ server });
 
 const TelegramToken = "8890131325:AAG2SAW8cG1x8yH2U-uyHfPtrmsyNpcvb9w";
 const TelegramChatId = "-5308116981";
-const PRIMARY_URL = "https://bridgeserver-0xlb.onrender.com";
 const SECONDARY_URL = "https://bridgeserver1-ydt4.onrender.com";
 
 function escapeHTML(str) {
@@ -78,7 +77,7 @@ app.post('/send-to-telegram', async (req, res) => {
         `💡 <b>NEW TELEGRAM BROADCAST / SUGGESTION</b>\n` +
         `👤 <b>User:</b> ${safeName} (ID: <code>${safeUserId}</code>)\n` +
         `📝 <b>Message:</b> ${safeMessage}\n` +
-        `💬 <a href="https://t.me/Obsidian_WardenBot?start=reply_${safeUserId}">Click here to Reply to ${safeName}</a>`;
+        `💬 <a href="https://t.me/Obsidian_WardenBot?start=reply_${safeName}">Click here to Reply to ${safeName}</a>`;
 
     await sendTelegramNotification(telegramFormattedText);
     res.sendStatus(200);
@@ -86,6 +85,7 @@ app.post('/send-to-telegram', async (req, res) => {
 
 app.post('/telegram-webhook', async (req, res) => {
     const update = req.body;
+    console.log("Incoming Telegram Webhook Update:", JSON.stringify(update));
 
     if (update && update.message && update.message.text) {
         const message = update.message;
@@ -115,6 +115,9 @@ app.post('/telegram-webhook', async (req, res) => {
             const payloadParts = commandPayload.trim().split(" ");
             targetUser = payloadParts[0] || "";
             replyText = payloadParts.slice(1).join(" ") || "";
+        } else if (commandName === "start" && commandPayload.startsWith("reply_")) {
+            targetUser = commandPayload.replace("reply_", "").trim();
+            replyText = "Reply session initialized for " + targetUser;
         }
 
         const broadcastPayload = {
@@ -128,6 +131,8 @@ app.post('/telegram-webhook', async (req, res) => {
             ReplyText: replyText
         };
 
+        console.log("Broadcasting command to Roblox clients:", broadcastPayload);
+
         wss.clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN) {
                 client.send(JSON.stringify(broadcastPayload));
@@ -135,13 +140,13 @@ app.post('/telegram-webhook', async (req, res) => {
         });
 
         try {
-            await fetch(`${PRIMARY_URL}/push-to-roblox`, {
+            await fetch(`${SECONDARY_URL}/push-to-roblox`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(broadcastPayload)
             });
         } catch (err) {
-            console.error("Failed to push command to Primary Server:", err.message);
+            console.error("Failed to push command to Server 2:", err.message);
         }
     }
 
