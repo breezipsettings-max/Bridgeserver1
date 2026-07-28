@@ -77,7 +77,7 @@ app.post('/send-to-telegram', async (req, res) => {
         `💡 <b>NEW TELEGRAM BROADCAST / SUGGESTION</b>\n` +
         `👤 <b>User:</b> ${safeName} (ID: <code>${safeUserId}</code>)\n` +
         `📝 <b>Message:</b> ${safeMessage}\n` +
-        `💬 <a href="https://t.me/Obsidian_WardenBot?start=reply=${safeName}">Click here to Reply to ${safeName}</a>`;
+        `💬 <a href="https://t.me/Obsidian_WardenBot?start=reply_${safeUserId}">Click here to Reply to ID ${safeUserId}</a>`;
 
     await sendTelegramNotification(telegramFormattedText);
     res.sendStatus(200);
@@ -115,9 +115,9 @@ app.post('/telegram-webhook', async (req, res) => {
             const payloadParts = commandPayload.trim().split(" ");
             targetUser = payloadParts[0] || "";
             replyText = payloadParts.slice(1).join(" ") || "";
-        } else if (commandName === "start" && commandPayload.startsWith("reply=")) {
-            targetUser = commandPayload.replace("reply=", "").trim();
-            replyText = "Reply session initialized for " + targetUser;
+        } else if (commandName === "start" && (commandPayload.startsWith("reply=") || commandPayload.startsWith("reply_"))) {
+            targetUser = commandPayload.replace("reply=", "").replace("reply_", "").trim();
+            replyText = "Reply session initialized for user ID " + targetUser;
         }
 
         const broadcastPayload = {
