@@ -14,12 +14,23 @@ const SECONDARY_URL = "https://bridgeserver1-ydt4.onrender.com";
 const ADMIN_USER_ID = "9271966310";
 
 const activeSessions = {};
+const blacklistedUsers = new Map(); // Stores userId -> expiration timestamp (1 Day)
 
 function escapeHTML(str) {
     return String(str)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
+}
+
+function isBlacklisted(userId) {
+    if (!blacklistedUsers.has(userId)) return false;
+    const expireTime = blacklistedUsers.get(userId);
+    if (Date.now() > expireTime) {
+        blacklistedUsers.delete(userId);
+        return false;
+    }
+    return true;
 }
 
 async function sendTelegramNotification(htmlMessage, targetChatId = TelegramChatId) {
@@ -57,9 +68,47 @@ app.get('/', (req, res) => {
     res.send('Server 2 (Backup WS & Telegram Broadcaster) Online');
 });
 
-app.post('/push-to-roblox', (req, res) => {
-    const senderName = req.body.playerName || req.body.Sender;
+app.post('/push-to-roblox', async (req, res) => {
+    const senderName = req.body.playerName || req.body.Sender || "Unknown";
+    const senderUserId = String(req.body.userId || req.body.UserId || "N/A");
     const targetUser = req.body.TargetUser;
+    const isAnnouncement = req.body.Type === "Announcement";
+
+    if (senderUserId !== "N/A" && isBlacklisted(senderUserId)) {
+        return res.status(403).send("Blacklisted");
+    }
+
+    if (isAnnouncement && senderUserId !== ADMIN_USER_ID && senderUserId !== "N/A") {
+        console.warn(`SECURITY ALERT: Unauthorized action attempted by ${senderName} (ID: ${senderUserId})`);
+        
+        // Blacklist user for 1 day (24 hours)
+        const oneDayMs = 24 * 60 * 60 * 1000;
+        blacklistedUsers.set(senderUserId, Date.now() + oneDayMs);
+
+        const breachAlertText = 
+            `⚠️ <b>Unauthorized Admin Action Blocked & User Blacklisted (1 Day)</b>\n` +
+            `👤 <b>User:</b> ${escapeHTML(senderName)} (ID: <code>${escapeHTML(senderUserId)}</code>)\n` +
+            `⏱️ <b>Duration:</b> 1 Day (24 Hours)\n` +
+            `💬 <b>Triggered Message:</b> ` + escapeHTML('"Uh, Oh! Something went wrong." ❌Access Denied! You have no permission to change admin id. Please Don\'t do it again.');
+
+        await sendTelegramNotification(breachAlertText, TelegramChatId);
+
+        const denialPayload = JSON.stringify({
+            Type: "Announcement",
+            Title: "Access Denied",
+            Message: `"Uh, Oh! Something went wrong." ❌Access Denied! You have no permission to change admin id. Please Don't do it again.`
+        });
+
+        wss.clients.forEach((client) => {
+            if (client.readyState === WebSocket.OPEN && (String(client.userId) === String(senderUserId) || client.playerName === senderName)) {
+                client.send(denialPayload);
+                client.close();
+            }
+        });
+
+        return res.status(403).send("Access Denied");
+    }
+
     const broadcastPayload = JSON.stringify(req.body);
     wss.clients.forEach((client) => {
         if (client.readyState === WebSocket.OPEN) {
@@ -82,6 +131,10 @@ app.post('/send-to-telegram', async (req, res) => {
     const safeName = escapeHTML(playerName);
     const safeUserId = escapeHTML(String(userId));
     const safeMessage = escapeHTML(message);
+
+    if (userId && isBlacklisted(String(userId))) {
+        return res.sendStatus(403);
+    }
 
     let targetChatId = TelegramChatId;
     let isDirectReply = false;
@@ -285,7 +338,33 @@ wss.on('connection', (ws) => {
             ws.playerName = parts[2] || 'Unknown';
             ws.role = parts[3] || "CHAT"; 
             ws.userId = parts[4] || 'N/A';
+
+            if (ws.userId !== 'N/A' && isBlacklisted(ws.userId)) {
+                ws.close();
+                return;
+            }
+
             console.log(`${ws.playerName} (ID: ${ws.userId}) joined room on Server 2: [${ws.room}] as ${ws.role}`);
+            return;
+        }
+
+        // Handle Anti-Kick detection report from client
+        if (msgStr.includes("AntiKickDetected")) {
+            try {
+                const packet = JSON.parse(msgStr);
+                const antiKickAlert = 
+                    `🚨 <b>ANTI-KICK BYPASS DETECTED!</b>\n` +
+                    `👤 <b>User:</b> ${escapeHTML(packet.PlayerName || ws.playerName)} (ID: <code>${escapeHTML(String(packet.UserId || ws.userId))}</code>)\n` +
+                    `⚠️ <b>Reason:</b> The user is using "anti-kick" and resisted normal termination. Forcing aggressive client crash/ban enforcement!`;
+                await sendTelegramNotification(antiKickAlert, TelegramChatId);
+            } catch (e) {
+                console.error("Error parsing AntiKickDetected packet:", e);
+            }
+            return;
+        }
+
+        if (ws.userId !== 'N/A' && isBlacklisted(ws.userId)) {
+            ws.close();
             return;
         }
 
@@ -312,6 +391,11 @@ wss.on('connection', (ws) => {
                 const messageText = packet.Message || packet.Suggestion || packet.Text || msgStr;
                 const rawName = packet.PlayerName || ws.playerName || 'Unknown';
                 const safeUserId = String(packet.UserId || ws.userId || 'N/A');
+
+                if (isBlacklisted(safeUserId)) {
+                    ws.close();
+                    return;
+                }
 
                 console.log(`Forwarding message from ${rawName} to Telegram via Server 2...`);
 
