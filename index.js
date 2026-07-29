@@ -189,9 +189,7 @@ app.post('/telegram-webhook', async (req, res) => {
                 `• <code>/end</code> - Ends and closes the active reply session for a specific user ID\n` +
                 `• <code>/announce</code> - Broadcasts a global server announcement to all connected clients`;
         } else if (commandName === "announce" || commandName === "broadcast") {
-            if (replyText) {
-                responseMessage = `📢 Global announcement broadcasted: "${escapeHTML(replyText)}"`;
-            } else {
+            if (!replyText) {
                 responseMessage = `⚠️ Usage error. Format: <code>/announce [Message]</code>`;
             }
         } else if (commandName === "reply") {
@@ -218,6 +216,14 @@ app.post('/telegram-webhook', async (req, res) => {
             };
 
             console.log("Broadcasting global announcement from Telegram to all clients:", announcementPayload);
+            
+            let telegramAnnouncementSuccessText = 
+                `📢 <b>SYSTEM-WIDE ANNOUNCEMENT</b>\n` +
+                `👤 <b>Sender:</b> ${escapeHTML(senderName)} (ID: <code>${escapeHTML(String(senderUserId))}</code>)\n` +
+                `📝 <b>Message:</b> "${escapeHTML(replyText)}"\n` +
+                `✅ <b>Status:</b> Pushed to all connected clients.`;
+            
+            await sendTelegramNotification(telegramAnnouncementSuccessText, chatId);
 
             wss.clients.forEach((client) => {
                 if (client.readyState === WebSocket.OPEN) {
