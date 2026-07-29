@@ -225,12 +225,6 @@ app.post('/telegram-webhook', async (req, res) => {
             
             await sendTelegramNotification(telegramAnnouncementSuccessText, chatId);
 
-            wss.clients.forEach((client) => {
-                if (client.readyState === WebSocket.OPEN) {
-                    client.send(JSON.stringify(announcementPayload));
-                }
-            });
-
             try {
                 await fetch(`${SECONDARY_URL}/push-to-roblox`, {
                     method: 'POST',
