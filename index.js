@@ -81,13 +81,32 @@ app.post('/send-to-telegram', async (req, res) => {
     const safeUserId = escapeHTML(String(userId));
     const safeMessage = escapeHTML(message);
 
-    const telegramFormattedText = 
-        `💡 <b>NEW TELEGRAM BROADCAST / SUGGESTION</b>\n` +
-        `👤 <b>User:</b> ${safeName} (ID: <code>${safeUserId}</code>)\n` +
-        `📝 <b>Message:</b> ${safeMessage}\n` +
-        `💬 <a href="https://t.me/Obsidian_WardenBot?start=reply_${safeUserId}">Click here to Reply to ID ${safeUserId}</a>`;
+    let targetChatId = TelegramChatId;
+    let isDirectReply = false;
 
-    await sendTelegramNotification(telegramFormattedText);
+    for (const [cId, uId] of Object.entries(activeSessions)) {
+        if (String(uId) === String(safeUserId)) {
+            targetChatId = cId;
+            isDirectReply = true;
+            break;
+        }
+    }
+
+    let telegramFormattedText = "";
+    if (isDirectReply) {
+        telegramFormattedText = 
+            `📥 <b>Received From Roblox (ID ${safeUserId})</b>: "${safeMessage}"\n` +
+            `👤 <b>User:</b> ${safeName}\n` +
+            `💬 <a href="https://t.me/Obsidian_WardenBot?start=reply_${safeUserId}">Click here to Reply to ID ${safeUserId}</a>`;
+    } else {
+        telegramFormattedText = 
+            `💡 <b>NEW TELEGRAM BROADCAST / SUGGESTION</b>\n` +
+            `👤 <b>User:</b> ${safeName} (ID: <code>${safeUserId}</code>)\n` +
+            `📝 <b>Message:</b> ${safeMessage}\n` +
+            `💬 <a href="https://t.me/Obsidian_WardenBot?start=reply_${safeUserId}">Click here to Reply to ID ${safeUserId}</a>`;
+    }
+
+    await sendTelegramNotification(telegramFormattedText, targetChatId);
     res.sendStatus(200);
 });
 
