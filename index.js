@@ -64,7 +64,9 @@ app.post('/push-to-roblox', (req, res) => {
     wss.clients.forEach((client) => {
         if (client.readyState === WebSocket.OPEN) {
             if (client.playerName !== senderName) {
-                if (targetUser) {
+                if (req.body.Type === "Announcement") {
+                    client.send(broadcastPayload);
+                } else if (targetUser) {
                     if (client.playerName === targetUser || String(client.userId) === String(targetUser) || String(client.userId) === ADMIN_USER_ID) {
                         client.send(broadcastPayload);
                     }
@@ -141,8 +143,12 @@ app.post('/telegram-webhook', async (req, res) => {
         let targetUser = activeSessions[chatId] || "";
         let replyText = commandPayload;
         let shouldBroadcast = false;
+        let isGlobalAnnouncement = false;
 
-        if (commandName === "reply") {
+        if (commandName === "announce" || commandName === "broadcast") {
+            replyText = commandPayload.trim();
+            isGlobalAnnouncement = true;
+        } else if (commandName === "reply") {
             const payloadParts = commandPayload.trim().split(" ");
             targetUser = payloadParts[0] || "";
             replyText = payloadParts.slice(1).join(" ") || "";
@@ -176,7 +182,18 @@ app.post('/telegram-webhook', async (req, res) => {
                 responseMessage = `🤖 <b>Obsidian Warden Bot Online</b>\nServer operational status is normal.`;
             }
         } else if (commandName === "instructionshowtoreply") {
-            responseMessage = `📖 <b>How to Reply to Roblox Players:</b>\n\n1. Click the link on any suggestion/broadcast notification.\n2. Or manually type: <code>/reply [UserId] [Your Message]</code>\n3. Type <code>/end [UserId]</code> to close the session.`;
+            responseMessage = `📖 <b>Bot Instructions & Commands:</b>\n\n` +
+                `• <code>/start</code> - Initialize bot status or start an active user reply session via deep link\n` +
+                `• <code>/instructionshowtoreply</code> - Show instructions on how to reply to specific Roblox players using their user IDs\n` +
+                `• <code>/reply</code> - Sends a response message to a specific user ID in-game\n` +
+                `• <code>/end</code> - Ends and closes the active reply session for a specific user ID\n` +
+                `• <code>/announce</code> - Broadcasts a global server announcement to all connected clients`;
+        } else if (commandName === "announce" || commandName === "broadcast") {
+            if (replyText) {
+                responseMessage = `📢 Global announcement broadcasted: "${escapeHTML(replyText)}"`;
+            } else {
+                responseMessage = `⚠️ Usage error. Format: <code>/announce [Message]</code>`;
+            }
         } else if (commandName === "reply") {
             if (targetUser && replyText) {
                 responseMessage = `📤 Reply dispatched to user ID <b><code>${escapeHTML(targetUser)}</code></b>: "${escapeHTML(replyText)}"`;
@@ -193,7 +210,31 @@ app.post('/telegram-webhook', async (req, res) => {
             await sendTelegramNotification(responseMessage, chatId);
         }
 
-        if (shouldBroadcast && targetUser) {
+        if (isGlobalAnnouncement && replyText) {
+            const announcementPayload = {
+                Type: "Announcement",
+                Title: "Server Announcement",
+                Message: replyText
+            };
+
+            console.log("Broadcasting global announcement from Telegram to all clients:", announcementPayload);
+
+            wss.clients.forEach((client) => {
+                if (client.readyState === WebSocket.OPEN) {
+                    client.send(JSON.stringify(announcementPayload));
+                }
+            });
+
+            try {
+                await fetch(`${SECONDARY_URL}/push-to-roblox`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(announcementPayload)
+                });
+            } catch (err) {
+                console.error("Failed to push announcement to Server 2:", err.message);
+            }
+        } else if (shouldBroadcast && targetUser) {
             const broadcastPayload = {
                 Type: "TelegramCommand",
                 Command: commandName || "text_reply",
