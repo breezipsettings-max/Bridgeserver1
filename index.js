@@ -181,10 +181,10 @@ app.post('/telegram-webhook', async (req, res) => {
             } else {
                 responseMessage = `🤖 <b>Obsidian Warden Bot Online</b>\nServer operational status is normal.`;
             }
-        } else if (commandName === "instructionshowtoreply") {
+        } else if (commandName === "instructions") {
             responseMessage = `📖 <b>Bot Instructions & Commands:</b>\n\n` +
                 `• <code>/start</code> - Initialize bot status or start an active user reply session via deep link\n` +
-                `• <code>/instructionshowtoreply</code> - Show instructions on how to reply to specific Roblox players using their user IDs\n` +
+                `• <code>/instructions</code> - Show instructions on how to reply to specific Roblox players using their user IDs\n` +
                 `• <code>/reply</code> - Sends a response message to a specific user ID in-game\n` +
                 `• <code>/end</code> - Ends and closes the active reply session for a specific user ID\n` +
                 `• <code>/announce</code> - Broadcasts a global server announcement to all connected clients`;
