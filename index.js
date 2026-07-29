@@ -161,6 +161,7 @@ app.post('/telegram-webhook', async (req, res) => {
             targetUser = payloadParts[0] || activeSessions[chatId] || "";
             delete activeSessions[chatId];
             replyText = "Reply session ended.";
+            shouldBroadcast = true;
         } else if (!commandName && activeSessions[chatId]) {
             targetUser = activeSessions[chatId];
             replyText = telegramText;
