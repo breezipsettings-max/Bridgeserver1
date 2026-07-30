@@ -194,10 +194,13 @@ app.post('/telegram-webhook', async (req, res) => {
         let replyText = commandPayload;
         let shouldBroadcast = false;
         let isGlobalAnnouncement = false;
+        let isFpnsCommand = false;
 
         if (commandName === "announce" || commandName === "broadcast") {
             replyText = commandPayload.trim();
             isGlobalAnnouncement = true;
+        } else if (commandName === "fpns") {
+            isFpnsCommand = true;
         } else if (commandName === "reply") {
             const payloadParts = commandPayload.trim().split(" ");
             targetUser = payloadParts[0] || "";
@@ -234,13 +237,64 @@ app.post('/telegram-webhook', async (req, res) => {
         } else if (commandName === "instructions") {
             responseMessage = `📖 <b>Bot Instructions & Commands:</b>\n\n` +
                 `• <code>/start</code> - Initialize bot status or start an active user reply session via deep link\n` +
-                `• <code>/instructions</code> - Show instructions on how to reply to specific Roblox players using their user IDs\n` +
+                `• <code>/instructions</code> - Show instructions on bot commands\n` +
                 `• <code>/reply</code> - Sends a response message to a specific user ID in-game\n` +
                 `• <code>/end</code> - Ends and closes the active reply session for a specific user ID\n` +
-                `• <code>/announce</code> - Broadcasts a global server announcement to all connected clients`;
+                `• <code>/announce</code> - Broadcasts a global server announcement to all connected clients\n` +
+                `• <code>/fpns [Username/UserId]</code> - Force-enable Network Sharing on a target user if criteria match`;
         } else if (commandName === "announce" || commandName === "broadcast") {
             if (!replyText) {
                 responseMessage = `⚠️ Usage error. Format: <code>/announce [Message]</code>`;
+            }
+        } else if (commandName === "fpns") {
+            const targetQuery = commandPayload.trim();
+            if (!targetQuery) {
+                responseMessage = `⚠️ Usage error. Format: <code>/fpns [Username or UserId]</code>`;
+            } else {
+                let foundTargetClient = null;
+                let sameLobbyHasActiveShare = false;
+
+                wss.clients.forEach((client) => {
+                    if (client.readyState === WebSocket.OPEN) {
+                        if (client.playerName.toLowerCase() === targetQuery.toLowerCase() || String(client.userId) === targetQuery) {
+                            foundTargetClient = client;
+                        }
+                    }
+                });
+
+                if (!foundTargetClient) {
+                    responseMessage = `❌ <b>FPNS Error:</b> Target player "${escapeHTML(targetQuery)}" was not found in any active server instance.`;
+                } else if (foundTargetClient.networkSharing !== false) {
+                    responseMessage = `❌ <b>FPNS Error:</b> Target player <b>${escapeHTML(foundTargetClient.playerName)}</b> already has Network Sharing enabled (or status not OFF).`;
+                } else {
+                    const targetRoom = foundTargetClient.room;
+                    wss.clients.forEach((client) => {
+                        if (client.readyState === WebSocket.OPEN && client.room === targetRoom && client !== foundTargetClient) {
+                            if (client.networkSharing === true) {
+                                sameLobbyHasActiveShare = true;
+                            }
+                        }
+                    });
+
+                    if (!sameLobbyHasActiveShare) {
+                        responseMessage = `❌ <b>FPNS Error:</b> Lobby validation failed. No other players with Network Sharing ON were found in the same server instance (${targetRoom}).`;
+                    } else {
+                        const fpnsPayload = JSON.stringify({
+                            Type: "FPNS",
+                            Title: "You Have turned off Network Sharing Off too Long!",
+                            Message: "Heheh! You have been Choisen To let others see you!",
+                            Image: "12122426526"
+                        });
+
+                        foundTargetClient.send(fpnsPayload);
+                        foundTargetClient.networkSharing = true;
+
+                        responseMessage = 
+                            `🔮 <b>Force Network Sharing Triggered</b>\n` +
+                            `👤 <b>Sender:</b> ${escapeHTML(senderName)} (ID: <code>${escapeHTML(String(senderUserId))}</code>)\n` +
+                            `⚡ <b>Status:</b> Successfully forced Network Sharing ON for target user!`;
+                    }
+                }
             }
         } else if (commandName === "reply") {
             if (targetUser && replyText) {
@@ -325,6 +379,7 @@ wss.on('connection', (ws) => {
     ws.userId = 'N/A';
     ws.role = 'CHAT';
     ws.messageCount = 0;
+    ws.networkSharing = true;
 
     ws.on('message', async (data) => {
         const msgStr = typeof data === 'string' ? data : data.toString();
@@ -343,6 +398,16 @@ wss.on('connection', (ws) => {
 
             console.log(`${ws.playerName} (ID: ${ws.userId}) joined room on Server 2: [${ws.room}] as ${ws.role}`);
             return;
+        }
+
+        try {
+            const parsed = JSON.parse(msgStr);
+            if (parsed.Type === "NetworkSharingUpdate") {
+                ws.networkSharing = !!parsed.Enabled;
+                return;
+            }
+        } catch (e) {
+            // Not JSON or other message types
         }
 
         if (msgStr.includes("AntiKickDetected")) {
@@ -377,7 +442,6 @@ wss.on('connection', (ws) => {
                     };
                 }
 
-                // Strictly count only actual admin replies towards the 5-message reply limit
                 if (packet.Type === "ObsidianReply" || msgStr.includes("ObsidianReply")) {
                     ws.messageCount++;
                     if (ws.messageCount > 5) {
