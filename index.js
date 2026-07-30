@@ -378,7 +378,12 @@ wss.on('connection', (ws) => {
                 }
             }
 
-            await sendTelegramNotification("🛑 Reply session closed.", targetChatId || TelegramChatId);
+            const limitReachedText = 
+                `🟡 <b>Session Auto-Closed</b>\n` +
+                `👤 <b>Player:</b> ${escapeHTML(ws.playerName)} (ID: <code>${escapeHTML(String(ws.userId))}</code>)\n` +
+                `⚠️ <b>Reason:</b> Player has reached the maximum limit of 5 replies.`;
+
+            await sendTelegramNotification(limitReachedText, targetChatId || TelegramChatId);
             return;
         }
 
