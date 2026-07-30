@@ -364,31 +364,6 @@ wss.on('connection', (ws) => {
             return;
         }
 
-        if (String(ws.userId) !== String(ADMIN_USER_ID)) {
-            ws.messageCount++;
-            if (ws.messageCount > 5) {
-                console.log(`Player ${ws.playerName} exceeded the 5-message limit.`);
-                ws.send(JSON.stringify({ Type: "Error", Message: "Message limit reached. You can only send a maximum of 5 messages." }));
-                
-                let targetChatId = null;
-                for (const [cId, uId] of Object.entries(activeSessions)) {
-                    if (String(uId) === String(ws.userId)) {
-                        targetChatId = cId;
-                        delete activeSessions[cId];
-                        break;
-                    }
-                }
-
-                const limitReachedText = 
-                    `🟡 <b>Session Auto-Closed</b>\n` +
-                    `👤 <b>Player:</b> ${escapeHTML(ws.playerName)} (ID: <code>${escapeHTML(String(ws.userId))}</code>)\n` +
-                    `⚠️ <b>Reason:</b> Player has reached the maximum limit of 5 replies.`;
-
-                await sendTelegramNotification(limitReachedText, targetChatId || TelegramChatId);
-                return;
-            }
-        }
-
         if (msgStr.includes("TelegramBroadcast") || msgStr.includes("ObsidianSuggest") || msgStr.includes("suggestion") || msgStr.includes("ObsidianReply")) {
             try {
                 let packet;
@@ -400,6 +375,32 @@ wss.on('connection', (ws) => {
                         PlayerName: ws.playerName, 
                         UserId: ws.userId 
                     };
+                }
+
+                // Strictly count only actual admin replies towards the 5-message reply limit
+                if (packet.Type === "ObsidianReply" || msgStr.includes("ObsidianReply")) {
+                    ws.messageCount++;
+                    if (ws.messageCount > 5) {
+                        console.log(`Player ${ws.playerName} exceeded the 5-message limit.`);
+                        ws.send(JSON.stringify({ Type: "Error", Message: "Message limit reached. You can only send a maximum of 5 messages." }));
+                        
+                        let targetChatId = null;
+                        for (const [cId, uId] of Object.entries(activeSessions)) {
+                            if (String(uId) === String(ws.userId)) {
+                                targetChatId = cId;
+                                delete activeSessions[cId];
+                                break;
+                            }
+                        }
+
+                        const limitReachedText = 
+                            `🟡 <b>Session Auto-Closed</b>\n` +
+                            `👤 <b>Player:</b> ${escapeHTML(ws.playerName)} (ID: <code>${escapeHTML(String(ws.userId))}</code>)\n` +
+                            `⚠️ <b>Reason:</b> Player has reached the maximum limit of 5 replies.`;
+
+                        await sendTelegramNotification(limitReachedText, targetChatId || TelegramChatId);
+                        return;
+                    }
                 }
 
                 const messageText = packet.Message || packet.Suggestion || packet.Text || msgStr;
