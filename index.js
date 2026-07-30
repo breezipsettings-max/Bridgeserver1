@@ -368,6 +368,17 @@ wss.on('connection', (ws) => {
         if (ws.messageCount > 5) {
             console.log(`Player ${ws.playerName} exceeded the 5-message limit.`);
             ws.send(JSON.stringify({ Type: "Error", Message: "Message limit reached. You can only send a maximum of 5 messages." }));
+            
+            let targetChatId = null;
+            for (const [cId, uId] of Object.entries(activeSessions)) {
+                if (String(uId) === String(ws.userId)) {
+                    targetChatId = cId;
+                    delete activeSessions[cId];
+                    break;
+                }
+            }
+
+            await sendTelegramNotification("🛑 Reply session closed.", targetChatId || TelegramChatId);
             return;
         }
 
