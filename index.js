@@ -14,7 +14,7 @@ const SECONDARY_URL = "https://bridgeserver1-ydt4.onrender.com";
 const ADMIN_USER_ID = "9271966310";
 
 const activeSessions = {};
-const blacklistedUsers = new Map(); // Stores userId -> expiration timestamp (1 Day)
+const blacklistedUsers = new Map();
 
 function escapeHTML(str) {
     return String(str)
@@ -81,7 +81,6 @@ app.post('/push-to-roblox', async (req, res) => {
     if (isAnnouncement && senderUserId !== ADMIN_USER_ID && senderUserId !== "N/A") {
         console.warn(`SECURITY ALERT: Unauthorized action attempted by ${senderName} (ID: ${senderUserId})`);
         
-        // Blacklist user for 1 day (24 hours)
         const oneDayMs = 24 * 60 * 60 * 1000;
         blacklistedUsers.set(senderUserId, Date.now() + oneDayMs);
 
@@ -112,10 +111,10 @@ app.post('/push-to-roblox', async (req, res) => {
     const broadcastPayload = JSON.stringify(req.body);
     wss.clients.forEach((client) => {
         if (client.readyState === WebSocket.OPEN) {
-            if (client.playerName !== senderName) {
-                if (req.body.Type === "Announcement") {
-                    client.send(broadcastPayload);
-                } else if (targetUser) {
+            if (req.body.Type === "Announcement") {
+                client.send(broadcastPayload);
+            } else if (client.playerName !== senderName) {
+                if (targetUser) {
                     if (client.playerName === targetUser || String(client.userId) === String(targetUser) || String(client.userId) === ADMIN_USER_ID) {
                         client.send(broadcastPayload);
                     }
@@ -348,7 +347,6 @@ wss.on('connection', (ws) => {
             return;
         }
 
-        // Handle Anti-Kick detection report from client
         if (msgStr.includes("AntiKickDetected")) {
             try {
                 const packet = JSON.parse(msgStr);
