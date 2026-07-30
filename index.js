@@ -201,6 +201,10 @@ app.post('/telegram-webhook', async (req, res) => {
             isGlobalAnnouncement = true;
         } else if (commandName === "fpns") {
             isFpnsCommand = true;
+        } else if (commandName === "playerlist" || commandName === "playerlists") {
+            // Handled in response message block below
+        } else if (commandName === "chooseplayer" || commandName === "choose_player") {
+            // Handled in response message block below
         } else if (commandName === "reply") {
             const payloadParts = commandPayload.trim().split(" ");
             targetUser = payloadParts[0] || "";
@@ -238,10 +242,74 @@ app.post('/telegram-webhook', async (req, res) => {
             responseMessage = `📖 <b>Bot Instructions & Commands:</b>\n\n` +
                 `• <code>/start</code> - Initialize bot status or start an active user reply session via deep link\n` +
                 `• <code>/instructions</code> - Show instructions on bot commands\n` +
+                `• <code>/playerlists</code> - View a clean list of all active connected script users\n` +
+                `• <code>/choosePlayer [Number/Name/ID]</code> - Inspect a specific user's detailed profile and network status\n` +
                 `• <code>/reply</code> - Sends a response message to a specific user ID in-game\n` +
                 `• <code>/end</code> - Ends and closes the active reply session for a specific user ID\n` +
                 `• <code>/announce</code> - Broadcasts a global server announcement to all connected clients\n` +
                 `• <code>/fpns [Username/UserId]</code> - Force-enable Network Sharing on a target user if criteria match`;
+        } else if (commandName === "playerlist" || commandName === "playerlists") {
+            let activeClients = [];
+            wss.clients.forEach((client) => {
+                if (client.readyState === WebSocket.OPEN) {
+                    activeClients.push(client);
+                }
+            });
+
+            if (activeClients.length === 0) {
+                responseMessage = `📋 <b>Connected Script Users List</b>\n\n❌ No active players currently connected.`;
+            } else {
+                let listText = `📋 <b>Connected Script Users List</b>\n\n`;
+                activeClients.forEach((client, index) => {
+                    const sName = escapeHTML(client.playerName || "Unknown");
+                    const sId = escapeHTML(String(client.userId || "N/A"));
+                    const nsStatus = client.networkSharing !== false ? "ON" : "OFF";
+                    listText += `${index + 1}. 👤 ${sName} (ID: <code>${sId}</code>) — 📡 Network Sharing: <b>${nsStatus}</b>\n`;
+                });
+                responseMessage = listText;
+            }
+        } else if (commandName === "chooseplayer" || commandName === "choose_player") {
+            const targetQuery = commandPayload.trim();
+            if (!targetQuery) {
+                responseMessage = `⚠️ Usage error. Format: <code>/choosePlayer [Number or Username/UserId]</code>`;
+            } else {
+                let activeClients = [];
+                wss.clients.forEach((client) => {
+                    if (client.readyState === WebSocket.OPEN) {
+                        activeClients.push(client);
+                    }
+                });
+
+                let foundClient = null;
+                const numIndex = parseInt(targetQuery, 10);
+                if (!isNaN(numIndex) && numIndex >= 1 && numIndex <= activeClients.length) {
+                    foundClient = activeClients[numIndex - 1];
+                } else {
+                    for (const client of activeClients) {
+                        if (client.playerName.toLowerCase() === targetQuery.toLowerCase() || String(client.userId) === targetQuery) {
+                            foundClient = client;
+                            break;
+                        }
+                    }
+                }
+
+                if (!foundClient) {
+                    responseMessage = `❌ <b>Inspection Error:</b> Player "${escapeHTML(targetQuery)}" was not found in active connections.`;
+                } else {
+                    const fName = escapeHTML(foundClient.playerName || "Unknown");
+                    const fId = escapeHTML(String(foundClient.userId || "N/A"));
+                    const fRoom = escapeHTML(String(foundClient.room || "EN"));
+                    const fNs = foundClient.networkSharing !== false ? "ON" : "OFF";
+                    
+                    responseMessage = 
+                        `🔍 <b>Player Profile Inspection</b>\n` +
+                        `👤 <b>Name:</b> ${fName}\n` +
+                        `🆔 <b>ID:</b> <code>${fId}</code>\n` +
+                        `🏠 <b>Lobby/Room:</b> ${fRoom}\n` +
+                        `📡 <b>Network Sharing:</b> <b>${fNs}</b>\n` +
+                        `💬 <a href="https://t.me/Obsidian_WardenBot?start=reply_${fId}">Click here to Reply to ID ${fId}</a>`;
+                }
+            }
         } else if (commandName === "announce" || commandName === "broadcast") {
             if (!replyText) {
                 responseMessage = `⚠️ Usage error. Format: <code>/announce [Message]</code>`;
