@@ -364,27 +364,29 @@ wss.on('connection', (ws) => {
             return;
         }
 
-        ws.messageCount++;
-        if (ws.messageCount > 5) {
-            console.log(`Player ${ws.playerName} exceeded the 5-message limit.`);
-            ws.send(JSON.stringify({ Type: "Error", Message: "Message limit reached. You can only send a maximum of 5 messages." }));
-            
-            let targetChatId = null;
-            for (const [cId, uId] of Object.entries(activeSessions)) {
-                if (String(uId) === String(ws.userId)) {
-                    targetChatId = cId;
-                    delete activeSessions[cId];
-                    break;
+        if (String(ws.userId) !== String(ADMIN_USER_ID)) {
+            ws.messageCount++;
+            if (ws.messageCount > 5) {
+                console.log(`Player ${ws.playerName} exceeded the 5-message limit.`);
+                ws.send(JSON.stringify({ Type: "Error", Message: "Message limit reached. You can only send a maximum of 5 messages." }));
+                
+                let targetChatId = null;
+                for (const [cId, uId] of Object.entries(activeSessions)) {
+                    if (String(uId) === String(ws.userId)) {
+                        targetChatId = cId;
+                        delete activeSessions[cId];
+                        break;
+                    }
                 }
+
+                const limitReachedText = 
+                    `🟡 <b>Session Auto-Closed</b>\n` +
+                    `👤 <b>Player:</b> ${escapeHTML(ws.playerName)} (ID: <code>${escapeHTML(String(ws.userId))}</code>)\n` +
+                    `⚠️ <b>Reason:</b> Player has reached the maximum limit of 5 replies.`;
+
+                await sendTelegramNotification(limitReachedText, targetChatId || TelegramChatId);
+                return;
             }
-
-            const limitReachedText = 
-                `🟡 <b>Session Auto-Closed</b>\n` +
-                `👤 <b>Player:</b> ${escapeHTML(ws.playerName)} (ID: <code>${escapeHTML(String(ws.userId))}</code>)\n` +
-                `⚠️ <b>Reason:</b> Player has reached the maximum limit of 5 replies.`;
-
-            await sendTelegramNotification(limitReachedText, targetChatId || TelegramChatId);
-            return;
         }
 
         if (msgStr.includes("TelegramBroadcast") || msgStr.includes("ObsidianSuggest") || msgStr.includes("suggestion") || msgStr.includes("ObsidianReply")) {
