@@ -10,7 +10,7 @@ const wss = new WebSocket.Server({ server });
 
 const TelegramToken = "8890131325:AAG2SAW8cG1x8yH2U-uyHfPtrmsyNpcvb9w";
 const TelegramChatId = "-5308116981";
-const SECONDARY_URL = "https://bridgeserver1-ydt4.onrender.com";
+const PRIMARY_URL = "https://bridgeserver1-ydt4.onrender.com";
 const ADMIN_USER_ID = "9271966310";
 
 const activeSessions = {};
@@ -66,6 +66,21 @@ async function sendTelegramNotification(htmlMessage, targetChatId = TelegramChat
 
 app.get('/', (req, res) => {
     res.send('Server 2 (Backup WS & Telegram Broadcaster) Online');
+});
+
+app.get('/active-players', (req, res) => {
+    const clients = [];
+    wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+            clients.push({
+                playerName: client.playerName || "Unknown",
+                userId: client.userId || "N/A",
+                room: client.room || "EN",
+                networkSharing: client.networkSharing !== false
+            });
+        }
+    });
+    res.json(clients);
 });
 
 app.post('/push-to-roblox', async (req, res) => {
@@ -243,18 +258,40 @@ app.post('/telegram-webhook', async (req, res) => {
                 `• <code>/start</code> - Initialize bot status or start an active user reply session via deep link\n` +
                 `• <code>/instructions</code> - Show instructions on bot commands\n` +
                 `• <code>/playerlists</code> - View a clean list of all active connected script users\n` +
-                `• <code>/choosePlayer [Number/Name/ID]</code> - Inspect a specific user's detailed profile and network status\n` +
+                `• <code>/chooseplayer [Number/Name/ID]</code> - Inspect a specific user's detailed profile and network status\n` +
                 `• <code>/reply</code> - Sends a response message to a specific user ID in-game\n` +
                 `• <code>/end</code> - Ends and closes the active reply session for a specific user ID\n` +
                 `• <code>/announce</code> - Broadcasts a global server announcement to all connected clients\n` +
                 `• <code>/fpns [Username/UserId]</code> - Force-enable Network Sharing on a target user if criteria match`;
         } else if (commandName === "playerlist" || commandName === "playerlists") {
             let activeClients = [];
+            
             wss.clients.forEach((client) => {
                 if (client.readyState === WebSocket.OPEN) {
-                    activeClients.push(client);
+                    activeClients.push({
+                        playerName: client.playerName || "Unknown",
+                        userId: client.userId || "N/A",
+                        room: client.room || "EN",
+                        networkSharing: client.networkSharing !== false
+                    });
                 }
             });
+
+            try {
+                const primaryRes = await fetch(`${PRIMARY_URL}/active-players`);
+                if (primaryRes.ok) {
+                    const remoteClients = await primaryRes.json();
+                    if (Array.isArray(remoteClients)) {
+                        remoteClients.forEach(rc => {
+                            if (!activeClients.some(ac => ac.userId === rc.userId && ac.playerName === rc.playerName)) {
+                                activeClients.push(rc);
+                            }
+                        });
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to fetch active players from PRIMARY_URL:", err.message);
+            }
 
             if (activeClients.length === 0) {
                 responseMessage = `📋 <b>Connected Script Users List</b>\n\n❌ No active players currently connected.`;
@@ -271,14 +308,36 @@ app.post('/telegram-webhook', async (req, res) => {
         } else if (commandName === "chooseplayer" || commandName === "choose_player") {
             const targetQuery = commandPayload.trim();
             if (!targetQuery) {
-                responseMessage = `⚠️ Usage error. Format: <code>/choosePlayer [Number or Username/UserId]</code>`;
+                responseMessage = `⚠️ Usage error. Format: <code>/chooseplayer [Number or Username/UserId]</code>`;
             } else {
                 let activeClients = [];
                 wss.clients.forEach((client) => {
                     if (client.readyState === WebSocket.OPEN) {
-                        activeClients.push(client);
+                        activeClients.push({
+                            playerName: client.playerName || "Unknown",
+                            userId: client.userId || "N/A",
+                            room: client.room || "EN",
+                            networkSharing: client.networkSharing !== false,
+                            localClient: client
+                        });
                     }
                 });
+
+                try {
+                    const primaryRes = await fetch(`${PRIMARY_URL}/active-players`);
+                    if (primaryRes.ok) {
+                        const remoteClients = await primaryRes.json();
+                        if (Array.isArray(remoteClients)) {
+                            remoteClients.forEach(rc => {
+                                if (!activeClients.some(ac => ac.userId === rc.userId && ac.playerName === rc.playerName)) {
+                                    activeClients.push({ ...rc, localClient: null });
+                                }
+                            });
+                        }
+                    }
+                } catch (err) {
+                    console.error("Failed to fetch active players from PRIMARY_URL for chooseplayer:", err.message);
+                }
 
                 let foundClient = null;
                 const numIndex = parseInt(targetQuery, 10);
@@ -398,13 +457,13 @@ app.post('/telegram-webhook', async (req, res) => {
             await sendTelegramNotification(telegramAnnouncementSuccessText, chatId);
 
             try {
-                await fetch(`${SECONDARY_URL}/push-to-roblox`, {
+                await fetch(`${PRIMARY_URL}/push-to-roblox`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(announcementPayload)
                 });
             } catch (err) {
-                console.error("Failed to push announcement to Server 2:", err.message);
+                console.error("Failed to push announcement to PRIMARY_URL:", err.message);
             }
         } else if (shouldBroadcast && targetUser) {
             const broadcastPayload = {
@@ -429,13 +488,13 @@ app.post('/telegram-webhook', async (req, res) => {
             });
 
             try {
-                await fetch(`${SECONDARY_URL}/push-to-roblox`, {
+                await fetch(`${PRIMARY_URL}/push-to-roblox`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(broadcastPayload)
                 });
             } catch (err) {
-                console.error("Failed to push command to Server 2:", err.message);
+                console.error("Failed to push command to PRIMARY_URL:", err.message);
             }
         }
     }
@@ -546,7 +605,7 @@ wss.on('connection', (ws) => {
 
                 console.log(`Forwarding message from ${rawName} to Telegram via Server 2...`);
 
-                const forwardRes = await fetch(`${SECONDARY_URL}/send-to-telegram`, {
+                const forwardRes = await fetch(`${PRIMARY_URL}/send-to-telegram`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -557,7 +616,7 @@ wss.on('connection', (ws) => {
                 });
 
                 if (!forwardRes.ok) {
-                    console.error(`Server 2 send-to-telegram returned status: ${forwardRes.status}`);
+                    console.error(`PRIMARY_URL send-to-telegram returned status: ${forwardRes.status}`);
                 }
             } catch (e) {
                 console.error("CRITICAL ERROR in Server 2 WebSocket forwarder:", e);
