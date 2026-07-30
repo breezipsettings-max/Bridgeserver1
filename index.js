@@ -149,9 +149,7 @@ app.post('/send-to-telegram', async (req, res) => {
     let telegramFormattedText = "";
     if (isDirectReply) {
         telegramFormattedText = 
-            `📥 <b>Received From Roblox (ID ${safeUserId})</b>: "${safeMessage}"\n` +
-            `👤 <b>User:</b> ${safeName}\n` +
-            `💬 <a href="https://t.me/Obsidian_WardenBot?start=reply_${safeUserId}">Click here to Reply to ID ${safeUserId}</a>`;
+            `📥 <b>Received From Roblox (ID ${safeUserId})</b>: "${safeMessage}"`;
     } else {
         telegramFormattedText = 
             `💡 <b>NEW TELEGRAM BROADCAST / SUGGESTION</b>\n` +
@@ -373,7 +371,7 @@ wss.on('connection', (ws) => {
             return;
         }
 
-        if (msgStr.includes("TelegramBroadcast") || msgStr.includes("ObsidianSuggest") || msgStr.includes("suggestion")) {
+        if (msgStr.includes("TelegramBroadcast") || msgStr.includes("ObsidianSuggest") || msgStr.includes("suggestion") || msgStr.includes("ObsidianReply")) {
             try {
                 let packet;
                 try {
