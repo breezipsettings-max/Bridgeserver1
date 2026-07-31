@@ -70,14 +70,23 @@ app.get('/', (req, res) => {
 
 app.get('/active-players', (req, res) => {
     const clients = [];
+    const seenIds = new Set();
+    
     wss.clients.forEach((client) => {
         if (client.readyState === WebSocket.OPEN) {
-            clients.push({
-                playerName: client.playerName || "Unknown",
-                userId: client.userId || "N/A",
-                room: client.room || "EN",
-                networkSharing: client.networkSharing !== false
-            });
+            const uId = String(client.userId || "N/A");
+            const pName = client.playerName || "Unknown";
+            const key = uId !== "N/A" ? uId : pName;
+            
+            if (!seenIds.has(key)) {
+                seenIds.add(key);
+                clients.push({
+                    playerName: pName,
+                    userId: uId,
+                    room: client.room || "EN",
+                    networkSharing: client.networkSharing !== false
+                });
+            }
         }
     });
     res.json(clients);
@@ -265,15 +274,23 @@ app.post('/telegram-webhook', async (req, res) => {
                 `• <code>/fpns [Username/UserId]</code> - Force-enable Network Sharing on a target user if criteria match`;
         } else if (commandName === "playerlist" || commandName === "playerlists") {
             let activeClients = [];
+            const seenIds = new Set();
             
             wss.clients.forEach((client) => {
                 if (client.readyState === WebSocket.OPEN) {
-                    activeClients.push({
-                        playerName: client.playerName || "Unknown",
-                        userId: client.userId || "N/A",
-                        room: client.room || "EN",
-                        networkSharing: client.networkSharing !== false
-                    });
+                    const uId = String(client.userId || "N/A");
+                    const pName = client.playerName || "Unknown";
+                    const key = uId !== "N/A" ? uId : pName;
+                    
+                    if (!seenIds.has(key)) {
+                        seenIds.add(key);
+                        activeClients.push({
+                            playerName: pName,
+                            userId: uId,
+                            room: client.room || "EN",
+                            networkSharing: client.networkSharing !== false
+                        });
+                    }
                 }
             });
 
@@ -283,7 +300,12 @@ app.post('/telegram-webhook', async (req, res) => {
                     const remoteClients = await primaryRes.json();
                     if (Array.isArray(remoteClients)) {
                         remoteClients.forEach(rc => {
-                            if (!activeClients.some(ac => ac.userId === rc.userId && ac.playerName === rc.playerName)) {
+                            const rId = String(rc.userId || "N/A");
+                            const rName = rc.playerName || "Unknown";
+                            const rKey = rId !== "N/A" ? rId : rName;
+                            
+                            if (!seenIds.has(rKey)) {
+                                seenIds.add(rKey);
                                 activeClients.push(rc);
                             }
                         });
@@ -311,15 +333,23 @@ app.post('/telegram-webhook', async (req, res) => {
                 responseMessage = `⚠️ Usage error. Format: <code>/chooseplayer [Number or Username/UserId]</code>`;
             } else {
                 let activeClients = [];
+                const seenIds = new Set();
                 wss.clients.forEach((client) => {
                     if (client.readyState === WebSocket.OPEN) {
-                        activeClients.push({
-                            playerName: client.playerName || "Unknown",
-                            userId: client.userId || "N/A",
-                            room: client.room || "EN",
-                            networkSharing: client.networkSharing !== false,
-                            localClient: client
-                        });
+                        const uId = String(client.userId || "N/A");
+                        const pName = client.playerName || "Unknown";
+                        const key = uId !== "N/A" ? uId : pName;
+                        
+                        if (!seenIds.has(key)) {
+                            seenIds.add(key);
+                            activeClients.push({
+                                playerName: pName,
+                                userId: uId,
+                                room: client.room || "EN",
+                                networkSharing: client.networkSharing !== false,
+                                localClient: client
+                            });
+                        }
                     }
                 });
 
@@ -329,7 +359,12 @@ app.post('/telegram-webhook', async (req, res) => {
                         const remoteClients = await primaryRes.json();
                         if (Array.isArray(remoteClients)) {
                             remoteClients.forEach(rc => {
-                                if (!activeClients.some(ac => ac.userId === rc.userId && ac.playerName === rc.playerName)) {
+                                const rId = String(rc.userId || "N/A");
+                                const rName = rc.playerName || "Unknown";
+                                const rKey = rId !== "N/A" ? rId : rName;
+                                
+                                if (!seenIds.has(rKey)) {
+                                    seenIds.add(rKey);
                                     activeClients.push({ ...rc, localClient: null });
                                 }
                             });
