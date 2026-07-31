@@ -84,7 +84,8 @@ app.get('/active-players', (req, res) => {
                     playerName: pName,
                     userId: uId,
                     room: client.room || "EN",
-                    networkSharing: client.networkSharing !== false
+                    networkSharing: client.networkSharing !== false,
+                    unsafeMode: !!client.unsafeMode
                 });
             }
         }
@@ -288,7 +289,8 @@ app.post('/telegram-webhook', async (req, res) => {
                             playerName: pName,
                             userId: uId,
                             room: client.room || "EN",
-                            networkSharing: client.networkSharing !== false
+                            networkSharing: client.networkSharing !== false,
+                            unsafeMode: !!client.unsafeMode
                         });
                     }
                 }
@@ -323,7 +325,8 @@ app.post('/telegram-webhook', async (req, res) => {
                     const sName = escapeHTML(client.playerName || "Unknown");
                     const sId = escapeHTML(String(client.userId || "N/A"));
                     const nsStatus = client.networkSharing !== false ? "ON" : "OFF";
-                    listText += `${index + 1}. 👤 ${sName} (ID: <code>${sId}</code>) — 📡 Network Sharing: <b>${nsStatus}</b>\n`;
+                    const usmStatus = client.unsafeMode ? "ON" : "OFF";
+                    listText += `${index + 1}. 👤 ${sName} (ID: <code>${sId}</code>) — 📡 NS: <b>${nsStatus}</b> | ⚠️ USM: <b>${usmStatus}</b>\n`;
                 });
                 responseMessage = listText;
             }
@@ -347,6 +350,7 @@ app.post('/telegram-webhook', async (req, res) => {
                                 userId: uId,
                                 room: client.room || "EN",
                                 networkSharing: client.networkSharing !== false,
+                                unsafeMode: !!client.unsafeMode,
                                 localClient: client
                             });
                         }
@@ -394,6 +398,7 @@ app.post('/telegram-webhook', async (req, res) => {
                     const fId = escapeHTML(String(foundClient.userId || "N/A"));
                     const fRoom = escapeHTML(String(foundClient.room || "EN"));
                     const fNs = foundClient.networkSharing !== false ? "ON" : "OFF";
+                    const fUsm = foundClient.unsafeMode ? "ON" : "OFF";
                     
                     responseMessage = 
                         `🔍 <b>Player Profile Inspection</b>\n` +
@@ -401,6 +406,7 @@ app.post('/telegram-webhook', async (req, res) => {
                         `🆔 <b>ID:</b> <code>${fId}</code>\n` +
                         `🏠 <b>Lobby/Room:</b> ${fRoom}\n` +
                         `📡 <b>Network Sharing:</b> <b>${fNs}</b>\n` +
+                        `⚠️ <b>Unsafe Mode (.usm):</b> <b>${fUsm}</b>\n` +
                         `💬 <a href="https://t.me/Obsidian_WardenBot?start=reply_${fId}">Click here to Reply to ID ${fId}</a>`;
                 }
             }
@@ -542,6 +548,7 @@ wss.on('connection', (ws) => {
     ws.role = 'CHAT';
     ws.messageCount = 0;
     ws.networkSharing = true;
+    ws.unsafeMode = false; // Initialized .usm / Unsafe Mode flag
 
     ws.on('message', async (data) => {
         const msgStr = typeof data === 'string' ? data : data.toString();
@@ -566,6 +573,43 @@ wss.on('connection', (ws) => {
             const parsed = JSON.parse(msgStr);
             if (parsed.Type === "NetworkSharingUpdate") {
                 ws.networkSharing = !!parsed.Enabled;
+                return;
+            }
+            
+            // Handle client USM packets (Type === "USM")
+            if (parsed.Type === "USM") {
+                const usmContent = parsed.Message || "";
+                const args = usmContent.trim().split(' ');
+                const subCommand = args[0] ? args[0].toUpperCase() : '';
+
+                if (subCommand === 'ON') {
+                    ws.unsafeMode = true;
+                    console.log(`[UnsafeMode] Activated for Player: ${ws.playerName} (${ws.userId})`);
+                } else if (subCommand === 'OFF') {
+                    ws.unsafeMode = false;
+                    console.log(`[UnsafeMode] Deactivated for Player: ${ws.playerName} (${ws.userId})`);
+                }
+
+                const usmAlert = 
+                    `⚠️ <b>USM Packet Received</b>\n` +
+                    `👤 <b>User:</b> ${escapeHTML(ws.playerName)} (ID: <code>${escapeHTML(String(ws.userId))}</code>)\n` +
+                    `📝 <b>Message:</b> ${escapeHTML(usmContent)}`;
+                await sendTelegramNotification(usmAlert, TelegramChatId);
+                return;
+            }
+
+            // Handle legacy .usm command packets from client
+            if (parsed.command && parsed.command.toLowerCase() === '.usm') {
+                const args = parsed.message ? parsed.message.trim().split(' ') : [];
+                const subCommand = args[0] ? args[0].toUpperCase() : '';
+
+                if (subCommand === 'ON') {
+                    ws.unsafeMode = true;
+                    console.log(`[UnsafeMode] Activated for Player: ${ws.playerName} (${ws.userId})`);
+                } else if (subCommand === 'OFF') {
+                    ws.unsafeMode = false;
+                    console.log(`[UnsafeMode] Deactivated for Player: ${ws.playerName} (${ws.userId})`);
+                }
                 return;
             }
         } catch (e) {
