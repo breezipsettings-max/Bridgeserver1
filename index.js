@@ -84,7 +84,6 @@ app.get('/active-players', (req, res) => {
                     playerName: pName,
                     userId: uId,
                     room: client.room || "EN",
-                    jobId: client.jobId || "N/A",
                     networkSharing: client.networkSharing !== false
                 });
             }
@@ -289,7 +288,6 @@ app.post('/telegram-webhook', async (req, res) => {
                             playerName: pName,
                             userId: uId,
                             room: client.room || "EN",
-                            jobId: client.jobId || "N/A",
                             networkSharing: client.networkSharing !== false
                         });
                     }
@@ -324,9 +322,8 @@ app.post('/telegram-webhook', async (req, res) => {
                 activeClients.forEach((client, index) => {
                     const sName = escapeHTML(client.playerName || "Unknown");
                     const sId = escapeHTML(String(client.userId || "N/A"));
-                    const sJobId = escapeHTML(String(client.jobId || "N/A"));
                     const nsStatus = client.networkSharing !== false ? "ON" : "OFF";
-                    listText += `${index + 1}. 👤 ${sName} (ID: <code>${sId}</code>) — 📡 Network Sharing: <b>${nsStatus}</b>\n🔗 Join Server (${sJobId})\n\n`;
+                    listText += `${index + 1}. 👤 ${sName} (ID: <code>${sId}</code>) — 📡 Network Sharing: <b>${nsStatus}</b>\n`;
                 });
                 responseMessage = listText;
             }
@@ -349,7 +346,6 @@ app.post('/telegram-webhook', async (req, res) => {
                                 playerName: pName,
                                 userId: uId,
                                 room: client.room || "EN",
-                                jobId: client.jobId || "N/A",
                                 networkSharing: client.networkSharing !== false,
                                 localClient: client
                             });
@@ -397,7 +393,6 @@ app.post('/telegram-webhook', async (req, res) => {
                     const fName = escapeHTML(foundClient.playerName || "Unknown");
                     const fId = escapeHTML(String(foundClient.userId || "N/A"));
                     const fRoom = escapeHTML(String(foundClient.room || "EN"));
-                    const fJobId = escapeHTML(String(foundClient.jobId || "N/A"));
                     const fNs = foundClient.networkSharing !== false ? "ON" : "OFF";
                     
                     responseMessage = 
@@ -405,7 +400,6 @@ app.post('/telegram-webhook', async (req, res) => {
                         `👤 <b>Name:</b> ${fName}\n` +
                         `🆔 <b>ID:</b> <code>${fId}</code>\n` +
                         `🏠 <b>Lobby/Room:</b> ${fRoom}\n` +
-                        `🔗 <b>JobId:</b> ${fJobId}\n` +
                         `📡 <b>Network Sharing:</b> <b>${fNs}</b>\n` +
                         `💬 <a href="https://t.me/Obsidian_WardenBot?start=reply_${fId}">Click here to Reply to ID ${fId}</a>`;
                 }
@@ -548,7 +542,6 @@ wss.on('connection', (ws) => {
     ws.role = 'CHAT';
     ws.messageCount = 0;
     ws.networkSharing = true;
-    ws.jobId = 'N/A';
 
     ws.on('message', async (data) => {
         const msgStr = typeof data === 'string' ? data : data.toString();
@@ -559,14 +552,13 @@ wss.on('connection', (ws) => {
             ws.playerName = parts[2] || 'Unknown';
             ws.role = parts[3] || "CHAT"; 
             ws.userId = parts[4] || 'N/A';
-            ws.jobId = parts[5] || 'N/A';
 
             if (ws.userId !== 'N/A' && isBlacklisted(ws.userId)) {
                 ws.close();
                 return;
             }
 
-            console.log(`${ws.playerName} (ID: ${ws.userId}) joined room on Server 2: [${ws.room}] (JobId: ${ws.jobId}) as ${ws.role}`);
+            console.log(`${ws.playerName} (ID: ${ws.userId}) joined room on Server 2: [${ws.room}] as ${ws.role}`);
             return;
         }
 
