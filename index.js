@@ -84,8 +84,8 @@ app.get('/active-players', (req, res) => {
                     playerName: pName,
                     userId: uId,
                     room: client.room || "EN",
-                    networkSharing: client.networkSharing !== false,
-                    jobId: client.jobId || "N/A"
+                    jobId: client.jobId || "N/A",
+                    networkSharing: client.networkSharing !== false
                 });
             }
         }
@@ -199,7 +199,7 @@ app.post('/telegram-webhook', async (req, res) => {
         const firstName = message.from.first_name || "Admin";
         const lastName = message.from.last_name || "";
         const senderName = `${firstName} ${lastName}`.trim();
-        const senderUserId = String(message.from.id);
+        const senderUserId = message.from.id;
         const telegramText = message.text;
 
         let commandName = "";
@@ -220,15 +220,12 @@ app.post('/telegram-webhook', async (req, res) => {
         let shouldBroadcast = false;
         let isGlobalAnnouncement = false;
         let isFpnsCommand = false;
-        let isTeleportCommand = false;
 
         if (commandName === "announce" || commandName === "broadcast") {
             replyText = commandPayload.trim();
             isGlobalAnnouncement = true;
         } else if (commandName === "fpns") {
             isFpnsCommand = true;
-        } else if (commandName === "teleport" || commandName === "tp") {
-            isTeleportCommand = true;
         } else if (commandName === "playerlist" || commandName === "playerlists") {
             // Handled in response message block below
         } else if (commandName === "chooseplayer" || commandName === "choose_player") {
@@ -273,7 +270,6 @@ app.post('/telegram-webhook', async (req, res) => {
                 `• <code>/playerlists</code> - View a clean list of all active connected script users\n` +
                 `• <code>/chooseplayer [Number/Name/ID]</code> - Inspect a specific user's detailed profile and network status\n` +
                 `• <code>/reply</code> - Sends a response message to a specific user ID in-game\n` +
-                `• <code>/teleport [JobId]</code> - Instantly zap *only you* to a specific server instance\n` +
                 `• <code>/end</code> - Ends and closes the active reply session for a specific user ID\n` +
                 `• <code>/announce</code> - Broadcasts a global server announcement to all connected clients\n` +
                 `• <code>/fpns [Username/UserId]</code> - Force-enable Network Sharing on a target user if criteria match`;
@@ -293,8 +289,8 @@ app.post('/telegram-webhook', async (req, res) => {
                             playerName: pName,
                             userId: uId,
                             room: client.room || "EN",
-                            networkSharing: client.networkSharing !== false,
-                            jobId: client.jobId || "N/A"
+                            jobId: client.jobId || "N/A",
+                            networkSharing: client.networkSharing !== false
                         });
                     }
                 }
@@ -330,11 +326,7 @@ app.post('/telegram-webhook', async (req, res) => {
                     const sId = escapeHTML(String(client.userId || "N/A"));
                     const sJobId = escapeHTML(String(client.jobId || "N/A"));
                     const nsStatus = client.networkSharing !== false ? "ON" : "OFF";
-                    const placeId = "8735521924";
-                    const joinUrl = `https://www.roblox.com/home?placeid=${placeId}&jobid=${sJobId}`;
-                    
-                    listText += `${index + 1}. 👤 ${sName} (ID: <code>${sId}</code>) — 📡 Network Sharing: <b>${nsStatus}</b>\n`;
-                    listText += `🔗 <a href="${joinUrl}">Join Server (${sJobId})</a>\n\n`;
+                    listText += `${index + 1}. 👤 ${sName} (ID: <code>${sId}</code>) — 📡 Network Sharing: <b>${nsStatus}</b>\n🔗 Join Server (${sJobId})\n\n`;
                 });
                 responseMessage = listText;
             }
@@ -357,8 +349,8 @@ app.post('/telegram-webhook', async (req, res) => {
                                 playerName: pName,
                                 userId: uId,
                                 room: client.room || "EN",
-                                networkSharing: client.networkSharing !== false,
                                 jobId: client.jobId || "N/A",
+                                networkSharing: client.networkSharing !== false,
                                 localClient: client
                             });
                         }
@@ -407,50 +399,20 @@ app.post('/telegram-webhook', async (req, res) => {
                     const fRoom = escapeHTML(String(foundClient.room || "EN"));
                     const fJobId = escapeHTML(String(foundClient.jobId || "N/A"));
                     const fNs = foundClient.networkSharing !== false ? "ON" : "OFF";
-                    const placeId = "8735521924";
-                    const joinUrl = `https://www.roblox.com/home?placeid=${placeId}&jobid=${fJobId}`;
                     
                     responseMessage = 
                         `🔍 <b>Player Profile Inspection</b>\n` +
                         `👤 <b>Name:</b> ${fName}\n` +
                         `🆔 <b>ID:</b> <code>${fId}</code>\n` +
                         `🏠 <b>Lobby/Room:</b> ${fRoom}\n` +
+                        `🔗 <b>JobId:</b> ${fJobId}\n` +
                         `📡 <b>Network Sharing:</b> <b>${fNs}</b>\n` +
-                        `🔗 <a href="${joinUrl}">Join Server (${fJobId})</a>\n` +
                         `💬 <a href="https://t.me/Obsidian_WardenBot?start=reply_${fId}">Click here to Reply to ID ${fId}</a>`;
                 }
             }
         } else if (commandName === "announce" || commandName === "broadcast") {
             if (!replyText) {
                 responseMessage = `⚠️ Usage error. Format: <code>/announce [Message]</code>`;
-            }
-        } else if (commandName === "teleport" || commandName === "tp") {
-            if (senderUserId !== ADMIN_USER_ID) {
-                responseMessage = `❌ <b>Access Denied:</b> Only the administrator can execute teleport commands.`;
-            } else {
-                const targetJobId = commandPayload.trim();
-                if (!targetJobId) {
-                    responseMessage = `⚠️ Usage error. Format: <code>/teleport [JobId]</code>`;
-                } else {
-                    const tpPayload = JSON.stringify({
-                        Type: "TeleportCommand",
-                        JobId: targetJobId
-                    });
-
-                    let foundYou = false;
-                    wss.clients.forEach((client) => {
-                        if (client.readyState === WebSocket.OPEN && String(client.userId) === String(ADMIN_USER_ID)) {
-                            client.send(tpPayload);
-                            foundYou = true;
-                        }
-                    });
-
-                    if (foundYou) {
-                        responseMessage = `🚀 Teleport signal sent to your game client for JobId: <code>${escapeHTML(targetJobId)}</code>`;
-                    } else {
-                        responseMessage = `❌ Error: Your admin Roblox client (ID: ${ADMIN_USER_ID}) is not currently connected to Server 2!`;
-                    }
-                }
             }
         } else if (commandName === "fpns") {
             const targetQuery = commandPayload.trim();
@@ -604,7 +566,7 @@ wss.on('connection', (ws) => {
                 return;
             }
 
-            console.log(`${ws.playerName} (ID: ${ws.userId}) [JobId: ${ws.jobId}] joined room on Server 2: [${ws.room}] as ${ws.role}`);
+            console.log(`${ws.playerName} (ID: ${ws.userId}) joined room on Server 2: [${ws.room}] (JobId: ${ws.jobId}) as ${ws.role}`);
             return;
         }
 
@@ -612,10 +574,6 @@ wss.on('connection', (ws) => {
             const parsed = JSON.parse(msgStr);
             if (parsed.Type === "NetworkSharingUpdate") {
                 ws.networkSharing = !!parsed.Enabled;
-                return;
-            }
-            if (parsed.Type === "JobIdReport") {
-                ws.jobId = parsed.JobId || "N/A";
                 return;
             }
         } catch (e) {
