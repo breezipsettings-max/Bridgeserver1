@@ -440,7 +440,6 @@ app.post('/telegram-webhook', async (req, res) => {
                         url: `https://t.me/Obsidian_WardenBot?start=reply_${fId}` 
                     });
 
-                    // Wrapped in an extra array so Telegram reads it as a single row of buttons
                     customInlineKeyboard = { 
                         inline_keyboard: [buttons] 
                     };
@@ -578,10 +577,10 @@ app.post('/telegram-webhook', async (req, res) => {
 });
 
 wss.on('connection', (ws) => {
-    ws.room = 'EN';
+    ws.room = 'EN' || 'SYSTEM_ONLY';
     ws.playerName = 'Unknown';
     ws.userId = 'N/A';
-    ws.role = 'CHAT';
+    ws.role = 'CHAT' || 'SYSTEM';
     ws.messageCount = 0;
     ws.networkSharing = true;
     ws.jobId = '';
