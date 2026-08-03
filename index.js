@@ -33,24 +33,40 @@ function isBlacklisted(userId) {
     return true;
 }
 
-async function sendTelegramNotification(htmlMessage, targetChatId = TelegramChatId) {
+async function sendTelegramNotification(htmlMessage, targetChatId = TelegramChatId, replyMarkup = null) {
     if (!TelegramToken || !targetChatId) {
         console.error("Telegram Token or Chat ID is missing!");
         return;
     }
     const chatId = String(targetChatId).trim();
-    let url = `https://api.telegram.org/bot${TelegramToken}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(htmlMessage)}&parse_mode=HTML`;
+    const payload = {
+        chat_id: chatId,
+        text: htmlMessage,
+        parse_mode: 'HTML'
+    };
+    if (replyMarkup) {
+        payload.reply_markup = replyMarkup;
+    }
 
     try {
-        const response = await fetch(url, { method: 'POST' });
+        const response = await fetch(`https://api.telegram.org/bot${TelegramToken}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
         const data = await response.json();
         
         if (!data.ok) {
             console.error("Telegram API rejected HTML message:", data);
             const plainMessage = htmlMessage.replace(/<[^>]*>?/gm, '');
-            let fallbackUrl = `https://api.telegram.org/bot${TelegramToken}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(plainMessage)}`;
+            payload.text = plainMessage;
+            delete payload.parse_mode;
             
-            const fallbackResponse = await fetch(fallbackUrl, { method: 'POST' });
+            const fallbackResponse = await fetch(`https://api.telegram.org/bot${TelegramToken}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
             const fallbackData = await fallbackResponse.json();
             
             if (!fallbackData.ok) {
@@ -84,7 +100,9 @@ app.get('/active-players', (req, res) => {
                     playerName: pName,
                     userId: uId,
                     room: client.room || "EN",
-                    networkSharing: client.networkSharing !== false
+                    networkSharing: client.networkSharing !== false,
+                    jobId: client.jobId || "",
+                    placeId: client.placeId || ""
                 });
             }
         }
@@ -256,6 +274,8 @@ app.post('/telegram-webhook', async (req, res) => {
         }
 
         let responseMessage = "";
+        let customInlineKeyboard = null;
+
         if (commandName === "start") {
             if (targetUser) {
                 responseMessage = `✅ Reply session active for user ID: <b><code>${escapeHTML(targetUser)}</code></b>.\nType your message to send it.`;
@@ -288,7 +308,9 @@ app.post('/telegram-webhook', async (req, res) => {
                             playerName: pName,
                             userId: uId,
                             room: client.room || "EN",
-                            networkSharing: client.networkSharing !== false
+                            networkSharing: client.networkSharing !== false,
+                            jobId: client.jobId || "",
+                            placeId: client.placeId || ""
                         });
                     }
                 }
@@ -347,6 +369,8 @@ app.post('/telegram-webhook', async (req, res) => {
                                 userId: uId,
                                 room: client.room || "EN",
                                 networkSharing: client.networkSharing !== false,
+                                jobId: client.jobId || "",
+                                placeId: client.placeId || "",
                                 localClient: client
                             });
                         }
@@ -388,20 +412,38 @@ app.post('/telegram-webhook', async (req, res) => {
                 }
 
                 if (!foundClient) {
-                    responseMessage = `❌ <b>Inspection Error:</b> Player "${escapeHTML(targetQuery)}" was not found in active connections.`;
+                    responseMessage = "❌ <b>Inspection Error:</b> Player " + escapeHTML(targetQuery) + " was not found in active connections.";
                 } else {
                     const fName = escapeHTML(foundClient.playerName || "Unknown");
                     const fId = escapeHTML(String(foundClient.userId || "N/A"));
                     const fRoom = escapeHTML(String(foundClient.room || "EN"));
                     const fNs = foundClient.networkSharing !== false ? "ON" : "OFF";
+                    const fJobId = foundClient.jobId || "";
+                    const fPlaceId = foundClient.placeId || "";
                     
-                    responseMessage = 
-                        `🔍 <b>Player Profile Inspection</b>\n` +
-                        `👤 <b>Name:</b> ${fName}\n` +
-                        `🆔 <b>ID:</b> <code>${fId}</code>\n` +
-                        `🏠 <b>Lobby/Room:</b> ${fRoom}\n` +
-                        `📡 <b>Network Sharing:</b> <b>${fNs}</b>\n` +
-                        `💬 <a href="https://t.me/Obsidian_WardenBot?start=reply_${fId}">Click here to Reply to ID ${fId}</a>`;
+                    responseMessage = "🔍 <b>Player Profile Inspection</b>\n" +
+                        "👤 <b>Name:</b> " + fName + "\n" +
+                        "🆔 <b>ID:</b> <code>" + fId + "</code>\n" +
+                        "🏠 <b>Lobby/Room:</b> " + fRoom + "\n" +
+                        "📡 <b>Network Sharing:</b> <b>" + fNs + "</b>";
+
+                    const buttons = [];
+                    if (fJobId && fPlaceId) {
+                        buttons.push({ 
+                            text: "🔗 Join Server", 
+                            url: `https://www.roblox.com/games/start?placeId=${fPlaceId}&jobId=${fJobId}` 
+                        });
+                    }
+                    
+                    buttons.push({ 
+                        text: "💬 Reply", 
+                        url: `https://t.me/Obsidian_WardenBot?start=reply_${fId}` 
+                    });
+
+                    // Wrapped in an extra array so Telegram reads it as a single row of buttons
+                    customInlineKeyboard = { 
+                        inline_keyboard: [buttons] 
+                    };
                 }
             }
         } else if (commandName === "announce" || commandName === "broadcast") {
@@ -471,7 +513,7 @@ app.post('/telegram-webhook', async (req, res) => {
         }
 
         if (responseMessage) {
-            await sendTelegramNotification(responseMessage, chatId);
+            await sendTelegramNotification(responseMessage, chatId, customInlineKeyboard);
         }
 
         if (isGlobalAnnouncement && replyText) {
@@ -542,6 +584,8 @@ wss.on('connection', (ws) => {
     ws.role = 'CHAT';
     ws.messageCount = 0;
     ws.networkSharing = true;
+    ws.jobId = '';
+    ws.placeId = '';
 
     ws.on('message', async (data) => {
         const msgStr = typeof data === 'string' ? data : data.toString();
@@ -552,6 +596,8 @@ wss.on('connection', (ws) => {
             ws.playerName = parts[2] || 'Unknown';
             ws.role = parts[3] || "CHAT"; 
             ws.userId = parts[4] || 'N/A';
+            ws.jobId = parts[5] || '';
+            ws.placeId = parts[6] || '';
 
             if (ws.userId !== 'N/A' && isBlacklisted(ws.userId)) {
                 ws.close();
@@ -566,6 +612,11 @@ wss.on('connection', (ws) => {
             const parsed = JSON.parse(msgStr);
             if (parsed.Type === "NetworkSharingUpdate") {
                 ws.networkSharing = !!parsed.Enabled;
+                return;
+            }
+            if (parsed.jobId || parsed.placeId) {
+                if (parsed.jobId) ws.jobId = parsed.jobId;
+                if (parsed.placeId) ws.placeId = parsed.placeId;
                 return;
             }
         } catch (e) {
