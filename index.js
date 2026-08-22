@@ -719,5 +719,5 @@ wss.on('connection', (ws) => {
 
 const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => {
-    console.log(`Server 2 (Backup WS & Telegram Broadcaster) running on port ${PORT}`);
+    console.log(`Server 2 (Secondary) running on port ${PORT}`);
 });
