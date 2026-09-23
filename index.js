@@ -687,8 +687,15 @@ wss.on('connection', (ws) => {
             return;
         }
 
+        --// Parse incoming JSON payloads upfront so structured data routes correctly
+        let parsed = null;
         try {
-            const parsed = JSON.parse(msgStr);
+            parsed = JSON.parse(msgStr);
+        } catch (e) {
+            // Not a JSON packet
+        }
+
+        if (parsed) {
             if (parsed.Type === "NetworkSharingUpdate") {
                 ws.networkSharing = !!parsed.Enabled;
                 return;
@@ -698,13 +705,89 @@ wss.on('connection', (ws) => {
                 if (parsed.placeId) ws.placeId = parsed.placeId;
                 return;
             }
-        } catch (e) {
-            // Not JSON or other message types
+            if (parsed.type === "translate_request" || parsed.Type === "translate_request") {
+                try {
+                    const userId = parsed.userId || ws.userId || 0;
+                    const playerName = parsed.playerName || ws.playerName || "Unknown";
+                    
+                    ws.userId = Number(userId);
+                    ws.playerName = playerName;
+                    if (parsed.target) {
+                        ws.outputLang = parsed.target;
+                    }
+
+                    const targetLang = ws.outputLang || "en";
+                    const textToTranslate = parsed.modifiedText || parsed.content || parsed.text || "";
+                    
+                    const cacheKey = `${targetLang}_${textToTranslate}`;
+                    if (translationCache[cacheKey]) {
+                        ws.send(JSON.stringify({
+                            type: "translate_response",
+                            id: parsed.id,
+                            translated: translationCache[cacheKey].translated,
+                            sourceCode: translationCache[cacheKey].sourceCode,
+                            modifiedText: parsed.modifiedText || textToTranslate,
+                            content: parsed.content || textToTranslate,
+                            colorHex: parsed.colorHex || "00FF00"
+                        }));
+                        return;
+                    }
+                    
+                    const translateUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(textToTranslate)}`;
+                    const response = await fetch(translateUrl, { headers: requestHeaders });
+                    
+                    if (response.status === 429) {
+                        ws.send(JSON.stringify({ 
+                            type: "translate_response", 
+                            id: parsed.id, 
+                            translated: textToTranslate, 
+                            sourceCode: "unknown",
+                            modifiedText: parsed.modifiedText || textToTranslate,
+                            content: parsed.content || textToTranslate,
+                            colorHex: parsed.colorHex || "00FF00"
+                        }));
+                        return;
+                    }
+
+                    const translationData = await response.json();
+                    let translated = "";
+                    let sourceCode = "unknown";
+                    
+                    if (translationData && translationData[0]) {
+                        for (const part of translationData[0]) {
+                            if (part && part[0]) {
+                                translated += part[0];
+                            }
+                        }
+                        sourceCode = translationData[2] || "unknown";
+                    }
+                    
+                    const finalTranslated = translated.trim();
+                    translationCache[cacheKey] = {
+                        translated: finalTranslated,
+                        sourceCode: sourceCode,
+                        rawBody: translationData
+                    };
+                    
+                    ws.send(JSON.stringify({
+                        type: "translate_response",
+                        id: parsed.id,
+                        translated: finalTranslated,
+                        sourceCode: sourceCode,
+                        modifiedText: parsed.modifiedText || textToTranslate,
+                        content: parsed.content || textToTranslate,
+                        colorHex: parsed.colorHex || "00FF00"
+                    }));
+                } catch (err) {
+                    console.error("Server translation packet error:", err);
+                }
+                return;
+            }
         }
 
         if (msgStr.includes("AntiKickDetected")) {
             try {
-                const packet = JSON.parse(msgStr);
+                const packet = parsed || JSON.parse(msgStr);
                 const antiKickAlert = 
                     `🚨 <b>ANTI-KICK BYPASS DETECTED!</b>\n` +
                     `👤 <b>User:</b> ${escapeHTML(packet.PlayerName || ws.playerName)} (ID: <code>${escapeHTML(String(packet.UserId || ws.userId))}</code>)\n` +
@@ -723,15 +806,17 @@ wss.on('connection', (ws) => {
 
         if (msgStr.includes("TelegramBroadcast") || msgStr.includes("ObsidianSuggest") || msgStr.includes("suggestion") || msgStr.includes("ObsidianReply")) {
             try {
-                let packet;
-                try {
-                    packet = JSON.parse(msgStr);
-                } catch (parseErr) {
-                    packet = { 
-                        Message: msgStr, 
-                        PlayerName: ws.playerName, 
-                        UserId: ws.userId 
-                    };
+                let packet = parsed;
+                if (!packet) {
+                    try {
+                        packet = JSON.parse(msgStr);
+                    } catch (parseErr) {
+                        packet = { 
+                            Message: msgStr, 
+                            PlayerName: ws.playerName, 
+                            UserId: ws.userId 
+                        };
+                    }
                 }
 
                 if (packet.Type === "ObsidianReply" || msgStr.includes("ObsidianReply")) {
@@ -789,14 +874,9 @@ wss.on('connection', (ws) => {
             return;
         }
 
-        // ==========================================
-        // ISOLATED SYSTEM MODULE (TRANSLATION ENGINE)
-        // ==========================================
-
-
         if (msgStr.includes("update_lang")) {
             try {
-                const packet = JSON.parse(msgStr);
+                const packet = parsed || JSON.parse(msgStr);
                 if (packet.target) {
                     ws.outputLang = packet.target;
                     console.log(`[Lang Sync] Player ${ws.playerName || "Unknown"} updated output lang to: [${ws.outputLang}]`);
@@ -807,92 +887,9 @@ wss.on('connection', (ws) => {
             return;
         }
 
-        if (msgStr.includes("translate_request")) {
-            let packet;
-            try {
-                packet = JSON.parse(msgStr);
-                if (packet.type === "translate_request") {
-                    const userId = packet.userId || ws.userId || 0;
-                    const playerName = packet.playerName || ws.playerName || "Unknown";
-                    
-                    ws.userId = Number(userId);
-                    ws.playerName = playerName;
-                    if (packet.target) {
-                        ws.outputLang = packet.target;
-                    }
-
-                    const targetLang = ws.outputLang || "en";
-                    const textToTranslate = packet.modifiedText || packet.content || packet.text || "";
-                    
-                    const cacheKey = `${targetLang}_${textToTranslate}`;
-                    if (translationCache[cacheKey]) {
-                        ws.send(JSON.stringify({
-                            type: "translate_response",
-                            id: packet.id,
-                            translated: translationCache[cacheKey].translated,
-                            sourceCode: translationCache[cacheKey].sourceCode,
-                            modifiedText: packet.modifiedText || textToTranslate,
-                            content: packet.content || textToTranslate,
-                            colorHex: packet.colorHex || "00FF00"
-                        }));
-                        return;
-                    }
-                    
-                    const translateUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(textToTranslate)}`;
-                    const response = await fetch(translateUrl, { headers: requestHeaders });
-                    
-                    if (response.status === 429) {
-                        ws.send(JSON.stringify({ 
-                            type: "translate_response", 
-                            id: packet.id, 
-                            translated: textToTranslate, 
-                            sourceCode: "unknown",
-                            modifiedText: packet.modifiedText || textToTranslate,
-                            content: packet.content || textToTranslate,
-                            colorHex: packet.colorHex || "00FF00"
-                        }));
-                        return;
-                    }
-
-                    const translationData = await response.json();
-                    let translated = "";
-                    let sourceCode = "unknown";
-                    
-                    if (translationData && translationData[0]) {
-                        for (const part of translationData[0]) {
-                            if (part && part[0]) {
-                                translated += part[0];
-                            }
-                        }
-                        sourceCode = translationData[2] || "unknown";
-                    }
-                    
-                    const finalTranslated = translated.trim();
-                    translationCache[cacheKey] = {
-                        translated: finalTranslated,
-                        sourceCode: sourceCode,
-                        rawBody: translationData
-                    };
-                    
-                    ws.send(JSON.stringify({
-                        type: "translate_response",
-                        id: packet.id,
-                        translated: finalTranslated,
-                        sourceCode: sourceCode,
-                        modifiedText: packet.modifiedText || textToTranslate,
-                        content: packet.content || textToTranslate,
-                        colorHex: packet.colorHex || "00FF00"
-                    }));
-                }
-            } catch (e) {
-                console.error("Server translation error:", e);
-            }
-            return;
-        }
-
         if (msgStr.includes("sign_broadcast")) {
             try {
-                const packet = JSON.parse(msgStr);
+                const packet = parsed || JSON.parse(msgStr);
                 if (packet.playerName) ws.playerName = packet.playerName;
                 if (packet.userId) ws.userId = Number(packet.userId);
                 if (packet.target) ws.outputLang = packet.target;
@@ -953,6 +950,7 @@ wss.on('connection', (ws) => {
             }
             return;
         }
+
         wss.clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN && client.room === ws.room) {
                 client.send(msgStr);
