@@ -10,7 +10,7 @@ const wss = new WebSocket.Server({ server });
 
 const TelegramToken = "8890131325:AAG2SAW8cG1x8yH2U-uyHfPtrmsyNpcvb9w";
 const TelegramChatId = "-5308116981";
-const PRIMARY_URL = "https://bridgeserver1-ydt4.onrender.com";
+const PRIMARY_URL = "https://bridgeserver-0xlb.onrender.com/";
 const ADMIN_USER_ID = "9271966310";
 
 const activeSessions = {};
