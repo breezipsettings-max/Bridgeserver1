@@ -660,6 +660,11 @@ wss.on('connection', (ws) => {
     ws.networkSharing = true;
     ws.jobId = '';
     ws.placeId = '';
+    ws.isAlive = true;
+
+    ws.on('pong', () => {
+        ws.isAlive = true;
+    });
 
     ws.on('message', async (data) => {
         const msgStr = typeof data === 'string' ? data : data.toString();
