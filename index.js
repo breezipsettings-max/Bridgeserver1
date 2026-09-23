@@ -245,9 +245,7 @@ app.post('/telegram-webhook', async (req, res) => {
         } else if (commandName === "fpns") {
             isFpnsCommand = true;
         } else if (commandName === "playerlist" || commandName === "playerlists") {
-            // Handled in response message block below
         } else if (commandName === "chooseplayer" || commandName === "choose_player") {
-            // Handled in response message block below
         } else if (commandName === "reply") {
             const payloadParts = commandPayload.trim().split(" ");
             targetUser = payloadParts[0] || "";
@@ -577,7 +575,6 @@ app.post('/telegram-webhook', async (req, res) => {
     }
 });
 
-// Cache storage for translation Caches
 const translationCache = {};
 
 const requestHeaders = {
@@ -687,12 +684,10 @@ wss.on('connection', (ws) => {
             return;
         }
 
-        --// Parse incoming JSON payloads upfront so structured data routes correctly
         let parsed = null;
         try {
             parsed = JSON.parse(msgStr);
         } catch (e) {
-            // Not a JSON packet
         }
 
         if (parsed) {
@@ -887,21 +882,21 @@ wss.on('connection', (ws) => {
             return;
         }
 
-        if (msgStr.includes("sign_broadcast")) {
+        if (msgStr.includes("sign_broadcast") || msgStr.includes("SendMessage_Broadcast")) {
             try {
                 const packet = parsed || JSON.parse(msgStr);
                 if (packet.playerName) ws.playerName = packet.playerName;
                 if (packet.userId) ws.userId = Number(packet.userId);
                 if (packet.target) ws.outputLang = packet.target;
                 
-                const rawText = packet.rawText || "";
+                const rawText = packet.rawText || packet.content || "";
                 const targetLang = ws.outputLang || "en";
                 const cacheKey = `${targetLang}_${rawText}`;
                 
-                let finalTranslated = rawText;
+                let finalTranslated = packet.translatedText || rawText;
                 let sourceCode = "unknown";
                 
-                if (rawText !== "") {
+                if (rawText !== "" && !packet.translatedText) {
                     if (translationCache[cacheKey]) {
                         finalTranslated = translationCache[cacheKey].translated;
                         sourceCode = translationCache[cacheKey].sourceCode;
@@ -930,12 +925,13 @@ wss.on('connection', (ws) => {
                 }
 
                 const broadcastPacket = JSON.stringify({
-                    type: "sign_broadcast",
+                    type: packet.type || "sign_broadcast",
                     playerName: ws.playerName,
                     displayName: packet.displayName || ws.playerName,
                     rawText: rawText,
                     translatedText: finalTranslated,
-                    sourceCode: sourceCode
+                    sourceCode: sourceCode,
+                    target: ws.outputLang
                 });
 
                 console.log(`[Server-Sided Broadcast] ${ws.playerName}: "${rawText}" -> "${finalTranslated}"`);
@@ -946,7 +942,7 @@ wss.on('connection', (ws) => {
                     }
                 });
             } catch (e) {
-                console.error("sign_broadcast error:", e);
+                console.error("SendMessage_Broadcast / sign_broadcast error:", e);
             }
             return;
         }
