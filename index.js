@@ -822,7 +822,7 @@ wss.on('connection', (ws) => {
                     }
 
                     const targetLang = ws.outputLang || "en";
-                    const textToTranslate = packet.text || "";
+                    const textToTranslate = packet.modifiedText || packet.content || packet.text || "";
                     
                     const cacheKey = `${targetLang}_${textToTranslate}`;
                     if (translationCache[cacheKey]) {
@@ -830,7 +830,10 @@ wss.on('connection', (ws) => {
                             type: "translate_response",
                             id: packet.id,
                             translated: translationCache[cacheKey].translated,
-                            sourceCode: translationCache[cacheKey].sourceCode
+                            sourceCode: translationCache[cacheKey].sourceCode,
+                            modifiedText: packet.modifiedText || textToTranslate,
+                            content: packet.content || textToTranslate,
+                            colorHex: packet.colorHex || "00FF00"
                         }));
                         return;
                     }
@@ -839,7 +842,15 @@ wss.on('connection', (ws) => {
                     const response = await fetch(translateUrl, { headers: requestHeaders });
                     
                     if (response.status === 429) {
-                        ws.send(JSON.stringify({ type: "translate_response", id: packet.id, translated: textToTranslate, sourceCode: "unknown" }));
+                        ws.send(JSON.stringify({ 
+                            type: "translate_response", 
+                            id: packet.id, 
+                            translated: textToTranslate, 
+                            sourceCode: "unknown",
+                            modifiedText: packet.modifiedText || textToTranslate,
+                            content: packet.content || textToTranslate,
+                            colorHex: packet.colorHex || "00FF00"
+                        }));
                         return;
                     }
 
@@ -867,7 +878,10 @@ wss.on('connection', (ws) => {
                         type: "translate_response",
                         id: packet.id,
                         translated: finalTranslated,
-                        sourceCode: sourceCode
+                        sourceCode: sourceCode,
+                        modifiedText: packet.modifiedText || textToTranslate,
+                        content: packet.content || textToTranslate,
+                        colorHex: packet.colorHex || "00FF00"
                     }));
                 }
             } catch (e) {
