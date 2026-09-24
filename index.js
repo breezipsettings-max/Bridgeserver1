@@ -657,6 +657,9 @@ wss.on('connection', (ws) => {
     ws.networkSharing = true;
     ws.jobId = '';
     ws.placeId = '';
+    ws.outputLang = 'EN';
+    ws.translationEnabled = true;
+    ws.translateSelf = false;
     ws.isAlive = true;
 
     ws.on('pong', () => {
@@ -695,30 +698,61 @@ wss.on('connection', (ws) => {
                 ws.networkSharing = !!parsed.Enabled;
                 return;
             }
+            if (parsed.Type === "ConfigUpdate" || parsed.Config || parsed.TRANSLATION_ENABLED !== undefined || parsed.translationEnabled !== undefined) {
+                const cfg = parsed.Config || parsed;
+                if (cfg.TARGET_LANG || cfg.target) {
+                    ws.outputLang = cfg.TARGET_LANG || cfg.target;
+                }
+                if (cfg.TRANSLATION_ENABLED !== undefined) {
+                    ws.translationEnabled = !!cfg.TRANSLATION_ENABLED;
+                } else if (cfg.translationEnabled !== undefined) {
+                    ws.translationEnabled = !!cfg.translationEnabled;
+                }
+                if (cfg.TRANSLATE_SELF !== undefined) {
+                    ws.translateSelf = !!cfg.TRANSLATE_SELF;
+                } else if (cfg.translateSelf !== undefined) {
+                    ws.translateSelf = !!cfg.translateSelf;
+                }
+                console.log(`[Config Sync] Player ${ws.playerName} updated Breezip Config: Lang=${ws.outputLang}, Enabled=${ws.translationEnabled}, Self=${ws.translateSelf}`);
+                return;
+            }
             if (parsed.jobId || parsed.placeId) {
                 if (parsed.jobId) ws.jobId = parsed.jobId;
                 if (parsed.placeId) ws.placeId = parsed.placeId;
                 return;
             }
-            if (parsed.type === "translate_request" || parsed.Type === "translate_request" || parsed.type === "translate" || parsed.Action === "Translate" || parsed.action === "translate") {
+            if (parsed.type === "translate_request" || parsed.Type === "translate_request") {
                 try {
-                    const userId = parsed.userId || parsed.UserId || ws.userId || 0;
-                    const playerName = parsed.playerName || parsed.PlayerName || ws.playerName || "Unknown";
+                    const userId = parsed.userId || ws.userId || 0;
+                    const playerName = parsed.playerName || ws.playerName || "Unknown";
                     
-                    ws.userId = Number(userId) || ws.userId;
+                    ws.userId = Number(userId);
                     ws.playerName = playerName;
-                    const targetLang = parsed.target || parsed.Target || ws.outputLang || "en";
-                    ws.outputLang = targetLang;
+                    if (parsed.target) {
+                        ws.outputLang = parsed.target;
+                    }
 
-                    const textToTranslate = parsed.modifiedText || parsed.content || parsed.text || parsed.Text || "";
-                    if (!textToTranslate) return;
+                    const targetLang = ws.outputLang || "en";
+                    const textToTranslate = parsed.modifiedText || parsed.content || parsed.text || "";
                     
+                    if (ws.translationEnabled === false) {
+                        ws.send(JSON.stringify({
+                            type: "translate_response",
+                            id: parsed.id,
+                            translated: textToTranslate,
+                            sourceCode: "unknown",
+                            modifiedText: parsed.modifiedText || textToTranslate,
+                            content: parsed.content || textToTranslate,
+                            colorHex: parsed.colorHex || "00FF00"
+                        }));
+                        return;
+                    }
+
                     const cacheKey = `${targetLang}_${textToTranslate}`;
                     if (translationCache[cacheKey]) {
                         ws.send(JSON.stringify({
                             type: "translate_response",
-                            Type: "translate_response",
-                            id: parsed.id || parsed.ID || 1,
+                            id: parsed.id,
                             translated: translationCache[cacheKey].translated,
                             sourceCode: translationCache[cacheKey].sourceCode,
                             modifiedText: parsed.modifiedText || textToTranslate,
@@ -734,8 +768,7 @@ wss.on('connection', (ws) => {
                     if (response.status === 429) {
                         ws.send(JSON.stringify({ 
                             type: "translate_response", 
-                            Type: "translate_response",
-                            id: parsed.id || parsed.ID || 1, 
+                            id: parsed.id, 
                             translated: textToTranslate, 
                             sourceCode: "unknown",
                             modifiedText: parsed.modifiedText || textToTranslate,
@@ -767,8 +800,7 @@ wss.on('connection', (ws) => {
                     
                     ws.send(JSON.stringify({
                         type: "translate_response",
-                        Type: "translate_response",
-                        id: parsed.id || parsed.ID || 1,
+                        id: parsed.id,
                         translated: finalTranslated,
                         sourceCode: sourceCode,
                         modifiedText: parsed.modifiedText || textToTranslate,
@@ -893,12 +925,12 @@ wss.on('connection', (ws) => {
                 
                 const rawText = packet.rawText || packet.content || "";
                 const targetLang = ws.outputLang || "en";
-                const cacheKey = `${targetLang}_${rawText}`;
                 
                 let finalTranslated = packet.translatedText || rawText;
                 let sourceCode = "unknown";
                 
-                if (rawText !== "" && !packet.translatedText) {
+                if (ws.translationEnabled !== false && rawText !== "" && !packet.translatedText) {
+                    const cacheKey = `${targetLang}_${rawText}`;
                     if (translationCache[cacheKey]) {
                         finalTranslated = translationCache[cacheKey].translated;
                         sourceCode = translationCache[cacheKey].sourceCode;
@@ -936,11 +968,13 @@ wss.on('connection', (ws) => {
                     target: ws.outputLang
                 });
 
-                console.log(`[Server-Sided Broadcast] ${ws.playerName}: "${rawText}" -> "${finalTranslated}"`);
+                console.log(`[Server-Sided Broadcast] ${ws.playerName}: "${rawText}" -> "${finalTranslated}" (Enabled: ${ws.translationEnabled}, Self: ${ws.translateSelf})`);
 
                 wss.clients.forEach((client) => {
-                    if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
-                        client.send(broadcastPacket);
+                    if (client.readyState === WebSocket.OPEN && client.room === ws.room) {
+                        if (client !== ws || ws.translateSelf) {
+                            client.send(broadcastPacket);
+                        }
                     }
                 });
             } catch (e) {
