@@ -700,25 +700,25 @@ wss.on('connection', (ws) => {
                 if (parsed.placeId) ws.placeId = parsed.placeId;
                 return;
             }
-            if (parsed.type === "translate_request" || parsed.Type === "translate_request") {
+            if (parsed.type === "translate_request" || parsed.Type === "translate_request" || parsed.type === "translate" || parsed.Action === "Translate" || parsed.action === "translate") {
                 try {
-                    const userId = parsed.userId || ws.userId || 0;
-                    const playerName = parsed.playerName || ws.playerName || "Unknown";
+                    const userId = parsed.userId || parsed.UserId || ws.userId || 0;
+                    const playerName = parsed.playerName || parsed.PlayerName || ws.playerName || "Unknown";
                     
-                    ws.userId = Number(userId);
+                    ws.userId = Number(userId) || ws.userId;
                     ws.playerName = playerName;
-                    if (parsed.target) {
-                        ws.outputLang = parsed.target;
-                    }
+                    const targetLang = parsed.target || parsed.Target || ws.outputLang || "en";
+                    ws.outputLang = targetLang;
 
-                    const targetLang = ws.outputLang || "en";
-                    const textToTranslate = parsed.modifiedText || parsed.content || parsed.text || "";
+                    const textToTranslate = parsed.modifiedText || parsed.content || parsed.text || parsed.Text || "";
+                    if (!textToTranslate) return;
                     
                     const cacheKey = `${targetLang}_${textToTranslate}`;
                     if (translationCache[cacheKey]) {
                         ws.send(JSON.stringify({
                             type: "translate_response",
-                            id: parsed.id,
+                            Type: "translate_response",
+                            id: parsed.id || parsed.ID || 1,
                             translated: translationCache[cacheKey].translated,
                             sourceCode: translationCache[cacheKey].sourceCode,
                             modifiedText: parsed.modifiedText || textToTranslate,
@@ -734,7 +734,8 @@ wss.on('connection', (ws) => {
                     if (response.status === 429) {
                         ws.send(JSON.stringify({ 
                             type: "translate_response", 
-                            id: parsed.id, 
+                            Type: "translate_response",
+                            id: parsed.id || parsed.ID || 1, 
                             translated: textToTranslate, 
                             sourceCode: "unknown",
                             modifiedText: parsed.modifiedText || textToTranslate,
@@ -766,7 +767,8 @@ wss.on('connection', (ws) => {
                     
                     ws.send(JSON.stringify({
                         type: "translate_response",
-                        id: parsed.id,
+                        Type: "translate_response",
+                        id: parsed.id || parsed.ID || 1,
                         translated: finalTranslated,
                         sourceCode: sourceCode,
                         modifiedText: parsed.modifiedText || textToTranslate,
