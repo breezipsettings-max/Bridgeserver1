@@ -1010,7 +1010,7 @@ app.get('/map', (req, res) => {
     if (rawName !== undefined && rawName !== null && rawName !== "") {
         let cleanedName = String(rawName).trim();
         cleanedName = cleanedName.replace(/\.bsp$/i, '').replace(/\.bz2$/i, '');
-        requestedMapName = cleanedName;
+        requestedMapName = cleanedName; // Completely overwrites any previous map name target
         return res.send(`Map "${cleanedName}" successfully queued for download.`);
     }
 
@@ -1107,9 +1107,10 @@ app.get('/map', (req, res) => {
 // THE CHECK ROUTE
 // ==========================================
 app.get('/map/check', (req, res) => {
+    res.setHeader('Content-Type', 'text/plain'); // FORCES CLEAN PLAIN-TEXT ONLY
     if (requestedMapName && requestedMapName !== "") {
         const currentMap = requestedMapName;
-        requestedMapName = ""; // instantly clear memory state so it never triggers a double download
+        requestedMapName = ""; // Instantly wipes memory cache so it never triggers a double download
         return res.send(currentMap);
     }
     res.send("");
