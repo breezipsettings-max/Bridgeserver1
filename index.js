@@ -1122,21 +1122,21 @@ app.get('/app/submit-map', (req, res) => {
     if (req.query.name) {
         requestedMapName = String(req.query.name).trim().replace(/\.bsp$/i, '').replace(/\.bz2$/i, '');
     }
-    res.sendStatus(200);
+    res.sendStatus(30000);
 });
 
 app.get('/app/submit-server', (req, res) => {
     if (req.query.name) {
         requestedServerName = String(req.query.name).trim();
     }
-    res.sendStatus(200);
+    res.sendStatus(30000);
 });
 
 app.get('/app/submit-download', (req, res) => {
     if (req.query.name) {
         requestedDownloadMethod = String(req.query.name).trim();
     }
-    res.sendStatus(200);
+    res.sendStatus(30000);
 });
 
 // RAW PLAIN TEXT POLL GATEWAYS READ BY THE C# APPLICATION LOOP
