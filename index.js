@@ -991,6 +991,130 @@ wss.on('connection', (ws) => {
     });
 });
 
+// ==========================================
+// !!!DO NOT INTERFERE WITH THIS!! 
+// !!THIS IS NOT ROBLOX RELATED!!!
+/////////////////////////////////////////////
+
+
+// ==========================================
+//  MAP MEMORY STORAGE
+// ==========================================
+let requestedMapName = "";
+
+// ==========================================
+//  THE /map ROUTE INTERFACE
+// ==========================================
+app.get('/map', (req, res) => {
+    const rawName = req.query.name;
+    if (rawName !== undefined && rawName !== null && rawName !== "") {
+        let cleanedName = String(rawName).trim();
+        cleanedName = cleanedName.replace(/\.bsp$/i, '').replace(/\.bz2$/i, '');
+        requestedMapName = cleanedName;
+        return res.send(`Map "${cleanedName}" successfully queued for download.`);
+    }
+
+    const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>TF2C FastDL Map Portal</title>
+        <style>
+            body {
+                background-color: #232323;
+                color: #ffffff;
+                font-family: Arial, sans-serif;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                height: 100vh;
+                margin: 0;
+            }
+            .warning-banner {
+                color: #ff3333;
+                font-size: 24px;
+                font-weight: bold;
+                text-align: center;
+                margin-bottom: 30px;
+                padding: 20px;
+                border: 2px solid #ff3333;
+                background-color: rgba(255, 51, 51, 0.1);
+                border-radius: 8px;
+                max-width: 800px;
+            }
+            .form-container {
+                display: flex;
+                gap: 10px;
+                margin-bottom: 40px;
+            }
+            input[type="text"] {
+                padding: 10px;
+                font-size: 16px;
+                border: 1px solid #555;
+                border-radius: 4px;
+                background-color: #333;
+                color: #fff;
+                width: 300px;
+            }
+            button {
+                padding: 10px 20px;
+                font-size: 16px;
+                background-color: #ff3333;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-weight: bold;
+            }
+            button:hover {
+                background-color: #cc0000;
+            }
+            .status-footer {
+                font-size: 16px;
+                color: #aaaaaa;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="warning-banner">
+            ⚠️ WARNING: THIS IS A TF2C FASTDL SYSTEM. THIS IS NOT A ROBLOX SITE OR SERVICE!
+        </div>
+        <div class="form-container">
+            <input type="text" id="mapInput" placeholder="Enter map name (e.g. ctf_well)">
+            <button onclick="submitMap()">Confirm</button>
+        </div>
+        <div class="status-footer">
+            Active queued map parameter: <span id="currentMap">${requestedMapName || '(None)'}</span>
+        </div>
+        <script>
+            function submitMap() {
+                const val = document.getElementById('mapInput').value;
+                if (val) {
+                    window.location.href = '/map?name=' + encodeURIComponent(val);
+                }
+            }
+        </script>
+    </body>
+    </html>
+    `;
+    res.setHeader('Content-Type', 'text/html');
+    res.send(htmlContent);
+});
+
+// ==========================================
+// THE CHECK ROUTE
+// ==========================================
+app.get('/map/check', (req, res) => {
+    if (requestedMapName && requestedMapName !== "") {
+        const currentMap = requestedMapName;
+        requestedMapName = ""; // instantly clear memory state so it never triggers a double download
+        return res.send(currentMap);
+    }
+    res.send("");
+});
+
 const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => {
     console.log(`Server 2 (Secondary) running on port ${PORT}`);
