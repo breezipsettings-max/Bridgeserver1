@@ -996,104 +996,118 @@ wss.on('connection', (ws) => {
 // !!THIS IS NOT ROBLOX RELATED!!!
 /////////////////////////////////////////////
 
-
-// ==========================================
-//  MAP MEMORY STORAGE
-// ==========================================
 let requestedMapName = "";
+let requestedServerName = "";
+let requestedDownloadMethod = "";
 
-// ==========================================
-//  THE /map ROUTE INTERFACE
-// ==========================================
-app.get('/map', (req, res) => {
-    const rawName = req.query.name;
-    if (rawName !== undefined && rawName !== null && rawName !== "") {
-        let cleanedName = String(rawName).trim();
-        cleanedName = cleanedName.replace(/\.bsp$/i, '').replace(/\.bz2$/i, '');
-        requestedMapName = cleanedName; // Completely overwrites any previous map name target
-        return res.send(`Map "${cleanedName}" successfully queued for download.`);
-    }
-
+// SINGLE PARENT URL SERVING THE ENTIRE TABBED DASHBOARD OVERLAY
+app.get('/app', (req, res) => {
     const htmlContent = `
     <!DOCTYPE html>
     <html>
     <head>
         <meta charset="UTF-8">
-        <title>TF2C FastDL Map Portal</title>
+        <title>TF2C FastDL Cloud Control</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
-            body {
-                background-color: #232323;
-                color: #ffffff;
-                font-family: Arial, sans-serif;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                height: 100vh;
-                margin: 0;
-            }
-            .warning-banner {
-                color: #ff3333;
-                font-size: 24px;
-                font-weight: bold;
-                text-align: center;
-                margin-bottom: 30px;
-                padding: 20px;
-                border: 2px solid #ff3333;
-                background-color: rgba(255, 51, 51, 0.1);
-                border-radius: 8px;
-                max-width: 800px;
-            }
-            .form-container {
-                display: flex;
-                gap: 10px;
-                margin-bottom: 40px;
-            }
-            input[type="text"] {
-                padding: 10px;
-                font-size: 16px;
-                border: 1px solid #555;
-                border-radius: 4px;
-                background-color: #333;
-                color: #fff;
-                width: 300px;
-            }
-            button {
-                padding: 10px 20px;
-                font-size: 16px;
-                background-color: #ff3333;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                cursor: pointer;
-                font-weight: bold;
-            }
-            button:hover {
-                background-color: #cc0000;
-            }
-            .status-footer {
-                font-size: 16px;
-                color: #aaaaaa;
-            }
+            body { background-color: #232323; color: #ffffff; font-family: 'Segoe UI', Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
+            .warning-banner { color: #ff3333; font-size: 15px; font-weight: bold; text-align: center; margin-bottom: 25px; padding: 12px; border: 2px solid #ff3333; background-color: rgba(255, 51, 51, 0.1); border-radius: 8px; max-width: 550px; text-transform: uppercase; }
+            .menu-card { background-color: #2a2a2a; border: 1px solid #444; border-radius: 6px; padding: 25px; margin-bottom: 20px; width: 100%; max-width: 550px; box-sizing: border-box; box-shadow: 0 4px 10px rgba(0,0,0,0.3); text-align: center; }
+            .menu-card h3 { margin-top: 0; color: #ff5555; font-size: 20px; margin-bottom: 20px; }
+            .menu-button { display: block; width: 100%; padding: 14px; margin: 10px 0; background-color: #3a3a3a; color: white; border: 1px solid #555; border-radius: 4px; font-size: 16px; font-weight: bold; cursor: pointer; text-align: left; transition: background 0.2s; }
+            .menu-button:hover { background-color: #4a4a4a; border-color: #ff5555; }
+            .form-panel { display: none; text-align: left; }
+            .form-container { display: flex; gap: 10px; margin-top: 15px; margin-bottom: 15px; }
+            input[type="text"], select { padding: 12px; font-size: 15px; border: 1px solid #555; border-radius: 4px; background-color: #333; color: #fff; flex-grow: 1; outline: none; }
+            button.confirm-btn { padding: 12px 24px; font-size: 15px; background-color: #5cb85c; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+            button.confirm-btn:hover { background-color: #4cae4c; }
+            button.back-btn { background-color: transparent; color: #ff5555; border: none; font-size: 15px; font-weight: bold; cursor: pointer; padding: 0; margin-bottom: 15px; text-align: left; outline: none; }
+            button.back-btn:hover { color: #ff3333; text-decoration: underline; }
+            .status-box { font-size: 13px; color: #aaaaaa; font-family: monospace; background: #1a1a1a; padding: 10px; border-radius: 4px; border: 1px solid #2d2d2d; margin-top: 5px; }
+            .highlight { color: #5cc8ff; font-weight: bold; }
         </style>
     </head>
     <body>
         <div class="warning-banner">
             ⚠️ WARNING: THIS IS A TF2C FASTDL SYSTEM. THIS IS NOT A ROBLOX SITE OR SERVICE!
         </div>
-        <div class="form-container">
-            <input type="text" id="mapInput" placeholder="Enter map name (e.g. ctf_well)">
-            <button onclick="submitMap()">Confirm</button>
+
+        <!-- MAIN SELECTION SECTOR -->
+        <div id="mainMenu" class="menu-card">
+            <h3>TF2C Downloader Control Panel</h3>
+            <button class="menu-button" onclick="openPanel('mapPanel')">🗺️ Add Map to Installation Queue</button>
+            <button class="menu-button" onclick="openPanel('serverPanel')">🖥️ Configure Target Server Choice</button>
+            <button class="menu-button" onclick="openPanel('methodPanel')">📥 Configure Download Method Option</button>
         </div>
-        <div class="status-footer">
-            Active queued map parameter: <span id="currentMap">${requestedMapName || '(None)'}</span>
+
+        <!-- 1. MAP QUEUE MANAGEMENT PANEL -->
+        <div id="mapPanel" class="menu-card form-panel">
+            <button class="back-btn" onclick="openMainMenu()">← Back to Main Menu</button>
+            <h3>🗺️ Map Installation Queue</h3>
+            <div class="form-container">
+                <input type="text" id="mapInput" placeholder="Enter map name (e.g. ctf_doublecross_day)">
+                <button class="confirm-btn" onclick="submitMap()">Confirm</button>
+            </div>
+            <div class="status-box">Active Queue: <span class="highlight" id="lblMap">${requestedMapName || '(None Pending)'}</span></div>
         </div>
+
+        <!-- 2. SERVER SELECTION PANEL -->
+        <div id="serverPanel" class="menu-card form-panel">
+            <button class="back-btn" onclick="openMainMenu()">← Back to Main Menu</button>
+            <h3>🖥️ Target Server Selection</h3>
+            <div class="form-container">
+                <select id="serverSelect">
+                    <option value="EventFall Server" ${requestedServerName === 'EventFall Server' ? 'selected' : ''}>EventFall Server</option>
+                    <option value="Knockout Server" ${requestedServerName === 'Knockout Server' ? 'selected' : ''}>Knockout Server</option>
+                    <option value="Ponosnaya Bratva" ${requestedServerName === 'Ponosnaya Bratva' ? 'selected' : ''}>Ponosnaya Bratva</option>
+                </select>
+                <button class="confirm-btn" onclick="submitServer()">Update</button>
+            </div>
+            <div class="status-box">Active Server: <span class="highlight" id="lblServer">${requestedServerName || 'EventFall Server (Default)'}</span></div>
+        </div>
+
+        <!-- 3. DOWNLOAD METHOD PANEL -->
+        <div id="methodPanel" class="menu-card form-panel">
+            <button class="back-btn" onclick="openMainMenu()">← Back to Main Menu</button>
+            <h3>📥 App Execution Option</h3>
+            <div class="form-container">
+                <select id="downloadSelect">
+                    <option value="Through The App" ${requestedDownloadMethod === 'Through The App' ? 'selected' : ''}>Through The App</option>
+                    <option value="Through The Browser" ${requestedDownloadMethod === 'Through The Browser' ? 'selected' : ''}>Through The Browser</option>
+                </select>
+                <button class="confirm-btn" onclick="submitDownload()">Update</button>
+            </div>
+            <div class="status-box">Active Method: <span class="highlight" id="lblMethod">${requestedDownloadMethod || 'Through The App (Default)'}</span></div>
+        </div>
+
         <script>
+            function openPanel(panelId) {
+                document.getElementById('mainMenu').style.display = 'none';
+                document.querySelectorAll('.form-panel').forEach(p => p.style.display = 'none');
+                document.getElementById(panelId).style.display = 'block';
+            }
+            function openMainMenu() {
+                document.querySelectorAll('.form-panel').forEach(p => p.style.display = 'none');
+                document.getElementById('mainMenu').style.display = 'block';
+            }
             function submitMap() {
-                const val = document.getElementById('mapInput').value;
-                if (val) {
-                    window.location.href = '/map?name=' + encodeURIComponent(val);
-                }
+                const val = document.getElementById('mapInput').value.trim();
+                if (!val) return;
+                fetch('/app/submit-map?name=' + encodeURIComponent(val))
+                    .then(() => {
+                        document.getElementById('lblMap').innerText = val;
+                        document.getElementById('mapInput').value = '';
+                    });
+            }
+            function submitServer() {
+                const val = document.getElementById('serverSelect').value;
+                fetch('/app/submit-server?name=' + encodeURIComponent(val))
+                    .then(() => { document.getElementById('lblServer').innerText = val; });
+            }
+            function submitDownload() {
+                const val = document.getElementById('downloadSelect').value;
+                fetch('/app/submit-download?name=' + encodeURIComponent(val))
+                    .then(() => { document.getElementById('lblMethod').innerText = val; });
             }
         </script>
     </body>
@@ -1103,15 +1117,55 @@ app.get('/map', (req, res) => {
     res.send(htmlContent);
 });
 
-// ==========================================
-// THE CHECK ROUTE
-// ==========================================
+// BACKGROUND DATA ENDPOINTS FOR STORAGE SETTING
+app.get('/app/submit-map', (req, res) => {
+    if (req.query.name) {
+        requestedMapName = String(req.query.name).trim().replace(/\.bsp$/i, '').replace(/\.bz2$/i, '');
+    }
+    res.sendStatus(200);
+});
+
+app.get('/app/submit-server', (req, res) => {
+    if (req.query.name) {
+        requestedServerName = String(req.query.name).trim();
+    }
+    res.sendStatus(200);
+});
+
+app.get('/app/submit-download', (req, res) => {
+    if (req.query.name) {
+        requestedDownloadMethod = String(req.query.name).trim();
+    }
+    res.sendStatus(200);
+});
+
+// RAW PLAIN TEXT POLL GATEWAYS READ BY THE C# APPLICATION LOOP
 app.get('/map/check', (req, res) => {
-    res.setHeader('Content-Type', 'text/plain'); // FORCES CLEAN PLAIN-TEXT ONLY
-    if (requestedMapName && requestedMapName !== "") {
-        const currentMap = requestedMapName;
-        requestedMapName = ""; // Instantly wipes memory cache so it never triggers a double download
-        return res.send(currentMap);
+    res.setHeader('Content-Type', 'text/plain');
+    if (requestedMapName) {
+        const val = requestedMapName;
+        requestedMapName = ""; 
+        return res.send(val);
+    }
+    res.send("");
+});
+
+app.get('/server/check', (req, res) => {
+    res.setHeader('Content-Type', 'text/plain');
+    if (requestedServerName) {
+        const val = requestedServerName;
+        requestedServerName = ""; 
+        return res.send(val);
+    }
+    res.send("");
+});
+
+app.get('/app/check', (req, res) => {
+    res.setHeader('Content-Type', 'text/plain');
+    if (requestedDownloadMethod) {
+        const val = requestedDownloadMethod;
+        requestedDownloadMethod = ""; 
+        return res.send(val);
     }
     res.send("");
 });
