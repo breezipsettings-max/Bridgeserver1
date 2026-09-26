@@ -1058,11 +1058,11 @@ app.get('/app', (req, res) => {
             <h3>🖥️ Target Server Selection</h3>
             <div class="form-container">
                 <select id="serverSelect">
-                    <option value="EventFall Server" ${requestedServerName === 'EventFall Server' ? 'selected' : ''}>1. EventFall Server</option>
-                    <option value="Knockout Server" ${requestedServerName === 'Knockout Server' ? 'selected' : ''}>2. Knockout Server</option>
-                    <option value="Ponosnaya Bratva" ${requestedServerName === 'Ponosnaya Bratva' ? 'selected' : ''}>3. Ponosnaya Bratva</option>
-                    <option value="Isle NightFall Server" ${requestedServerName === 'Isle NightFall Server' ? 'selected' : ''}>4. Isle NightFall Server</option>
-                    <option value="Shenanigans Inc Server" ${requestedServerName === 'Shenanigans Inc Server' ? 'selected' : ''}>5. Shenanigans Inc Server</option>
+                    <option value="EventFall Server" ${requestedServerName === 'EventFall Server' ? 'selected' : ''}>EventFall Server</option>
+                    <option value="Knockout Server" ${requestedServerName === 'Knockout Server' ? 'selected' : ''}>Knockout Server</option>
+                    <option value="Ponosnaya Bratva" ${requestedServerName === 'Ponosnaya Bratva' ? 'selected' : ''}>Ponosnaya Bratva</option>
+                    <option value="Isle NightFall Server" ${requestedServerName === 'Isle NightFall Server' ? 'selected' : ''}>Isle NightFall Server</option>
+                    <option value="Shenanigans Inc Server" ${requestedServerName === 'Shenanigans Inc Server' ? 'selected' : ''}>Shenanigans Inc Server</option>
                 </select>
                 <button class="confirm-btn" onclick="submitServer()">Update</button>
             </div>
