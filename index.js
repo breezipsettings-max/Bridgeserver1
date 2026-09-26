@@ -999,6 +999,7 @@ wss.on('connection', (ws) => {
 let requestedMapName = "";
 let requestedServerName = "";
 let requestedDownloadMethod = "";
+let autoChangeServerEnabled = true;
 
 // SINGLE PARENT URL SERVING THE ENTIRE TABBED DASHBOARD OVERLAY
 app.get('/app', (req, res) => {
@@ -1057,9 +1058,11 @@ app.get('/app', (req, res) => {
             <h3>🖥️ Target Server Selection</h3>
             <div class="form-container">
                 <select id="serverSelect">
-                    <option value="EventFall Server" ${requestedServerName === 'EventFall Server' ? 'selected' : ''}>EventFall Server</option>
-                    <option value="Knockout Server" ${requestedServerName === 'Knockout Server' ? 'selected' : ''}>Knockout Server</option>
-                    <option value="Ponosnaya Bratva" ${requestedServerName === 'Ponosnaya Bratva' ? 'selected' : ''}>Ponosnaya Bratva</option>
+                    <option value="EventFall Server" ${requestedServerName === 'EventFall Server' ? 'selected' : ''}>1. EventFall Server</option>
+                    <option value="Knockout Server" ${requestedServerName === 'Knockout Server' ? 'selected' : ''}>2. Knockout Server</option>
+                    <option value="Ponosnaya Bratva" ${requestedServerName === 'Ponosnaya Bratva' ? 'selected' : ''}>3. Ponosnaya Bratva</option>
+                    <option value="Isle NightFall Server" ${requestedServerName === 'Isle NightFall Server' ? 'selected' : ''}>4. Isle NightFall Server</option>
+                    <option value="Shenanigans Inc Server" ${requestedServerName === 'Shenanigans Inc Server' ? 'selected' : ''}>5. Shenanigans Inc Server</option>
                 </select>
                 <button class="confirm-btn" onclick="submitServer()">Update</button>
             </div>
@@ -1122,21 +1125,21 @@ app.get('/app/submit-map', (req, res) => {
     if (req.query.name) {
         requestedMapName = String(req.query.name).trim().replace(/\.bsp$/i, '').replace(/\.bz2$/i, '');
     }
-    res.sendStatus(30000);
+    res.sendStatus(200);
 });
 
 app.get('/app/submit-server', (req, res) => {
     if (req.query.name) {
         requestedServerName = String(req.query.name).trim();
     }
-    res.sendStatus(30000);
+    res.sendStatus(200);
 });
 
 app.get('/app/submit-download', (req, res) => {
     if (req.query.name) {
         requestedDownloadMethod = String(req.query.name).trim();
     }
-    res.sendStatus(30000);
+    res.sendStatus(200);
 });
 
 // RAW PLAIN TEXT POLL GATEWAYS READ BY THE C# APPLICATION LOOP
@@ -1168,6 +1171,11 @@ app.get('/app/check', (req, res) => {
         return res.send(val);
     }
     res.send("");
+});
+
+app.get('/bat/check', (req, res) => {
+    res.setHeader('Content-Type', 'text/plain');
+    res.send("v2.1");
 });
 
 const PORT = process.env.PORT || 8080;
