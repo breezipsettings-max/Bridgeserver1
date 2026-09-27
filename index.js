@@ -1,9 +1,18 @@
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
+const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const app = express();
 app.use(express.json());
+
+app.use('/proxy', createProxyMiddleware({
+    target: 'https://bridgeserver1-kkwk.onrender.com',
+    changeOrigin: true,
+    pathRewrite: {
+        '^/proxy': '',
+    },
+}));
 
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
@@ -735,12 +744,11 @@ wss.on('connection', (ws) => {
                 
                 if (parsed.vcRoom || parsed.VcRoom) {
                     ws.vcRoom = parsed.vcRoom || parsed.VcRoom;
-                    ws.room = ws.vcRoom; // Sync this so room broadcasting works correctly!
+                    ws.room = ws.vcRoom; 
                 }
                 
                 console.log(`[VC Update] Player ${ws.playerName} (ID: ${ws.userId}) -> VC Enabled: ${ws.voiceChatEnabled}, Speaking: ${ws.isSpeaking}, Room: ${ws.vcRoom}`);
                 
-                // Broadcast VC state to other clients in the same room
                 const vcBroadcastPacket = JSON.stringify({
                     Type: "VoiceChatStateBroadcast",
                     PlayerName: ws.playerName,
@@ -1027,17 +1035,11 @@ wss.on('connection', (ws) => {
     });
 });
 
-// ==========================================
-// !!!DO NOT INTERFERE WITH THIS!! 
-// !!THIS IS NOT ROBLOX RELATED!!!
-/////////////////////////////////////////////
-
 let requestedMapName = "";
 let requestedServerName = "";
 let requestedDownloadMethod = "";
 let autoChangeServerEnabled = true;
 
-// SINGLE PARENT URL SERVING THE ENTIRE TABBED DASHBOARD OVERLAY
 app.get('/app', (req, res) => {
     const htmlContent = `
     <!DOCTYPE html>
@@ -1069,7 +1071,6 @@ app.get('/app', (req, res) => {
             ⚠️ WARNING: THIS IS A TF2C FASTDL SYSTEM. THIS IS NOT A ROBLOX SITE OR SERVICE!
         </div>
 
-        <!-- MAIN SELECTION SECTOR -->
         <div id="mainMenu" class="menu-card">
             <h3>TF2C Downloader Control Panel</h3>
             <button class="menu-button" onclick="openPanel('mapPanel')">🗺️ Add Map to Installation Queue</button>
@@ -1077,7 +1078,6 @@ app.get('/app', (req, res) => {
             <button class="menu-button" onclick="openPanel('methodPanel')">📥 Configure Download Method Option</button>
         </div>
 
-        <!-- 1. MAP QUEUE MANAGEMENT PANEL -->
         <div id="mapPanel" class="menu-card form-panel">
             <button class="back-btn" onclick="openMainMenu()">← Back to Main Menu</button>
             <h3>🗺️ Map Installation Queue</h3>
@@ -1088,7 +1088,6 @@ app.get('/app', (req, res) => {
             <div class="status-box">Active Queue: <span class="highlight" id="lblMap">${requestedMapName || '(None Pending)'}</span></div>
         </div>
 
-        <!-- 2. SERVER SELECTION PANEL -->
         <div id="serverPanel" class="menu-card form-panel">
             <button class="back-btn" onclick="openMainMenu()">← Back to Main Menu</button>
             <h3>🖥️ Target Server Selection</h3>
@@ -1105,7 +1104,6 @@ app.get('/app', (req, res) => {
             <div class="status-box">Active Server: <span class="highlight" id="lblServer">${requestedServerName || 'EventFall Server (Default)'}</span></div>
         </div>
 
-        <!-- 3. DOWNLOAD METHOD PANEL -->
         <div id="methodPanel" class="menu-card form-panel">
             <button class="back-btn" onclick="openMainMenu()">← Back to Main Menu</button>
             <h3>📥 App Execution Option</h3>
@@ -1156,7 +1154,6 @@ app.get('/app', (req, res) => {
     res.send(htmlContent);
 });
 
-// BACKGROUND DATA ENDPOINTS FOR STORAGE SETTING
 app.get('/app/submit-map', (req, res) => {
     if (req.query.name) {
         requestedMapName = String(req.query.name).trim().replace(/\.bsp$/i, '').replace(/\.bz2$/i, '');
@@ -1178,7 +1175,6 @@ app.get('/app/submit-download', (req, res) => {
     res.sendStatus(200);
 });
 
-// RAW PLAIN TEXT POLL GATEWAYS READ BY THE C# APPLICATION LOOP
 app.get('/map/check', (req, res) => {
     res.setHeader('Content-Type', 'text/plain');
     if (requestedMapName) {
