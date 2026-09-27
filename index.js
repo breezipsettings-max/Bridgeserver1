@@ -721,6 +721,28 @@ wss.on('connection', (ws) => {
                 if (parsed.placeId) ws.placeId = parsed.placeId;
                 return;
             }
+            if (parsed.Type === "VoiceChatUpdate" || parsed.type === "voice_chat_update") {
+                ws.voiceChatEnabled = !!parsed.Enabled;
+                ws.isSpeaking = !!parsed.Speaking;
+                if (parsed.vcRoom) ws.vcRoom = parsed.vcRoom;
+                console.log(`[VC Update] Player ${ws.playerName} (ID: ${ws.userId}) -> VC Enabled: ${ws.voiceChatEnabled}, Speaking: ${ws.isSpeaking}, Room: ${ws.vcRoom}`);
+                
+                // Broadcast VC state to other clients in the same room
+                const vcBroadcastPacket = JSON.stringify({
+                    Type: "VoiceChatStateBroadcast",
+                    PlayerName: ws.playerName,
+                    UserId: ws.userId,
+                    Enabled: ws.voiceChatEnabled,
+                    Speaking: ws.isSpeaking,
+                    VcRoom: ws.vcRoom
+                });
+                wss.clients.forEach((client) => {
+                    if (client.readyState === WebSocket.OPEN && client.room === ws.room && client !== ws) {
+                        client.send(vcBroadcastPacket);
+                    }
+                });
+                return;
+            }
             if (parsed.type === "translate_request" || parsed.Type === "translate_request") {
                 try {
                     const userId = parsed.userId || ws.userId || 0;
