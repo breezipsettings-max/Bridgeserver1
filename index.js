@@ -661,6 +661,9 @@ wss.on('connection', (ws) => {
     ws.translationEnabled = true;
     ws.translateSelf = false;
     ws.isAlive = true;
+    ws.voiceChatEnabled = false;
+    ws.isSpeaking = false;
+    ws.vcRoom = '';
 
     ws.on('pong', () => {
         ws.isAlive = true;
@@ -722,9 +725,19 @@ wss.on('connection', (ws) => {
                 return;
             }
             if (parsed.Type === "VoiceChatUpdate" || parsed.type === "voice_chat_update") {
+                const userId = parsed.userId || ws.userId || 0;
+                const playerName = parsed.playerName || ws.playerName || "Unknown";
+                
+                ws.userId = userId;
+                ws.playerName = playerName;
                 ws.voiceChatEnabled = !!parsed.Enabled;
                 ws.isSpeaking = !!parsed.Speaking;
-                if (parsed.vcRoom) ws.vcRoom = parsed.vcRoom;
+                
+                if (parsed.vcRoom) {
+                    ws.vcRoom = parsed.vcRoom;
+                    ws.room = parsed.vcRoom; // Sync this so room broadcasting works correctly!
+                }
+                
                 console.log(`[VC Update] Player ${ws.playerName} (ID: ${ws.userId}) -> VC Enabled: ${ws.voiceChatEnabled}, Speaking: ${ws.isSpeaking}, Room: ${ws.vcRoom}`);
                 
                 // Broadcast VC state to other clients in the same room
@@ -736,6 +749,7 @@ wss.on('connection', (ws) => {
                     Speaking: ws.isSpeaking,
                     VcRoom: ws.vcRoom
                 });
+                
                 wss.clients.forEach((client) => {
                     if (client.readyState === WebSocket.OPEN && client.room === ws.room && client !== ws) {
                         client.send(vcBroadcastPacket);
