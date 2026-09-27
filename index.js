@@ -725,9 +725,8 @@ wss.on('connection', (ws) => {
                 return;
             }
             if (parsed.Type === "VoiceChatUpdate" || parsed.type === "voice_chat_update") {
-                const userId = parsed.userId || ws.userId || 0;
-                const playerName = parsed.playerName || ws.playerName || "Unknown";
-                
+                try {
+                const packet = parsed || JSON.parse(msgStr);
                 ws.userId = userId;
                 ws.playerName = playerName;
                 ws.voiceChatEnabled = !!parsed.Enabled;
@@ -738,7 +737,7 @@ wss.on('connection', (ws) => {
                     ws.room = parsed.vcRoom; // Sync this so room broadcasting works correctly!
                 }
                 
-                console.log(`[VC Update] Player ${ws.playerName} (ID: ${ws.userId}) -> VC Enabled: ${ws.voiceChatEnabled}, Speaking: ${ws.isSpeaking}, Room: ${ws.vcRoom}`);
+                console.log(`[VC Update] Player ${packet.PlayerName || ws.playerName} (ID: ${packet.UserId || ws.userId}) -> VC Enabled: ${ws.voiceChatEnabled}, Speaking: ${ws.isSpeaking}, Room: ${ws.vcRoom}`);
                 
                 // Broadcast VC state to other clients in the same room
                 const vcBroadcastPacket = JSON.stringify({
