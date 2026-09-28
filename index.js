@@ -9,6 +9,7 @@ app.use(express.json());
 app.use('/proxy', createProxyMiddleware({
     target: 'https://bridgeserver1-kkwk.onrender.com',
     changeOrigin: true,
+    ws: true,
     pathRewrite: {
         '^/proxy': '',
     },
