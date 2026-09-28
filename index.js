@@ -1,20 +1,8 @@
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
-const { createProxyMiddleware } = require('http-proxy-middleware');
-
 const app = express();
 app.use(express.json());
-
-// Scoped proxy configuration to avoid hijacking main WebSockets
-app.use('/proxy', createProxyMiddleware({
-    target: 'https://bridgeserver1-kkwk.onrender.com',
-    changeOrigin: true,
-    ws: false, // Disabled ws here so it doesn't steal connections from your main wss server!
-    pathRewrite: {
-        '^/proxy': '',
-    },
-}));
 
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
@@ -1073,13 +1061,6 @@ wss.on('connection', (ws) => {
     });
 });
 
-
-
-//////////////////////////////////
-// !!DO NOT INTEREFERE WITH THIS!!
-// !!NOR CHANGE ANYTHING!!
-// !!THIS IS NOT ROBLOX RELATED!!
-/////////////////////////////////
 let requestedMapName = "";
 let requestedServerName = "";
 let requestedDownloadMethod = "";
