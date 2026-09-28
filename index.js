@@ -6,9 +6,11 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 const app = express();
 app.use(express.json());
 
+// Scoped proxy configuration to avoid hijacking main WebSockets
 app.use('/proxy', createProxyMiddleware({
     target: 'https://bridgeserver1-kkwk.onrender.com',
     changeOrigin: true,
+    ws: false, // Disabled ws here so it doesn't steal connections from your main wss server!
     pathRewrite: {
         '^/proxy': '',
     },
@@ -24,7 +26,6 @@ const ADMIN_USER_ID = "9271966310";
 
 const activeSessions = {};
 const blacklistedUsers = new Map();
-
 
 function escapeHTML(str) {
     return String(str)
@@ -625,12 +626,19 @@ app.get('/json.txt', async (req, res) => {
     try {
         const response = await fetch(translateUrl, { headers: requestHeaders });
         
-        if (response.status === 429) {
-            console.error("CRITICAL: Google rate limit hit on HTTP endpoint!");
-            return res.status(429).json({ error: "Proxy server rate-limited by translation provider." });
+        if (!response.ok || response.status === 429) {
+            console.error(`CRITICAL: Google rate limit or block hit on HTTP endpoint! Status: ${response.status}`);
+            return res.status(502).json({ error: "Translation provider blocked or rate-limited the request." });
         }
 
-        const translationData = await response.json();
+        const textResponse = await response.text();
+        let translationData;
+        try {
+            translationData = JSON.parse(textResponse);
+        } catch (parseErr) {
+            console.error("Failed to parse Google Translate response as JSON:", textResponse);
+            return res.status(502).json({ error: "Invalid response format from translation provider." });
+        }
         
         let translated = "";
         let sourceCode = "unknown";
@@ -809,7 +817,7 @@ wss.on('connection', (ws) => {
                     const translateUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(textToTranslate)}`;
                     const response = await fetch(translateUrl, { headers: requestHeaders });
                     
-                    if (response.status === 429) {
+                    if (!response.ok || response.status === 429) {
                         ws.send(JSON.stringify({ 
                             type: "translate_response", 
                             id: parsed.id, 
@@ -822,7 +830,23 @@ wss.on('connection', (ws) => {
                         return;
                     }
 
-                    const translationData = await response.json();
+                    const textResponse = await response.text();
+                    let translationData;
+                    try {
+                        translationData = JSON.parse(textResponse);
+                    } catch (parseErr) {
+                        ws.send(JSON.stringify({ 
+                            type: "translate_response", 
+                            id: parsed.id, 
+                            translated: textToTranslate, 
+                            sourceCode: "unknown",
+                            modifiedText: parsed.modifiedText || textToTranslate,
+                            content: parsed.content || textToTranslate,
+                            colorHex: parsed.colorHex || "00FF00"
+                        }));
+                        return;
+                    }
+
                     let translated = "";
                     let sourceCode = "unknown";
                     
@@ -835,7 +859,7 @@ wss.on('connection', (ws) => {
                         sourceCode = translationData[2] || "unknown";
                     }
                     
-                    const finalTranslated = translated.trim();
+                    const finalTranslated = translated.trim() || textToTranslate;
                     translationCache[cacheKey] = {
                         translated: finalTranslated,
                         sourceCode: sourceCode,
@@ -853,6 +877,15 @@ wss.on('connection', (ws) => {
                     }));
                 } catch (err) {
                     console.error("Server translation packet error:", err);
+                    ws.send(JSON.stringify({ 
+                        type: "translate_response", 
+                        id: parsed.id, 
+                        translated: parsed.modifiedText || parsed.content || parsed.text || "", 
+                        sourceCode: "unknown",
+                        modifiedText: parsed.modifiedText || "",
+                        content: parsed.content || "",
+                        colorHex: parsed.colorHex || "00FF00"
+                    }));
                 }
                 return;
             }
@@ -981,23 +1014,28 @@ wss.on('connection', (ws) => {
                     } else {
                         const translateUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(rawText)}`;
                         const response = await fetch(translateUrl, { headers: requestHeaders });
-                        if (response.status !== 429) {
-                            const translationData = await response.json();
-                            let translated = "";
-                            if (translationData && translationData[0]) {
-                                for (const part of translationData[0]) {
-                                    if (part && part[0]) {
-                                        translated += part[0];
+                        if (response.ok && response.status !== 429) {
+                            const textResponse = await response.text();
+                            try {
+                                const translationData = JSON.parse(textResponse);
+                                let translated = "";
+                                if (translationData && translationData[0]) {
+                                    for (const part of translationData[0]) {
+                                        if (part && part[0]) {
+                                            translated += part[0];
+                                        }
                                     }
+                                    sourceCode = translationData[2] || "unknown";
                                 }
-                                sourceCode = translationData[2] || "unknown";
+                                finalTranslated = translated.trim() || rawText;
+                                translationCache[cacheKey] = {
+                                    translated: finalTranslated,
+                                    sourceCode: sourceCode,
+                                    rawBody: translationData
+                                };
+                            } catch (err) {
+                                // Fallback to raw text if json parsing fails
                             }
-                            finalTranslated = translated.trim() || rawText;
-                            translationCache[cacheKey] = {
-                                translated: finalTranslated,
-                                sourceCode: sourceCode,
-                                rawBody: translationData
-                            };
                         }
                     }
                 }
@@ -1035,6 +1073,13 @@ wss.on('connection', (ws) => {
     });
 });
 
+
+
+//////////////////////////////////
+// !!DO NOT INTEREFERE WITH THIS!!
+// !!NOR CHANGE ANYTHING!!
+// !!THIS IS NOT ROBLOX RELATED!!
+/////////////////////////////////
 let requestedMapName = "";
 let requestedServerName = "";
 let requestedDownloadMethod = "";
@@ -1128,7 +1173,7 @@ app.get('/app', (req, res) => {
                 document.getElementById('mainMenu').style.display = 'block';
             }
             function submitMap() {
-                const val = document.getElementById('mapInput').value.trim();
+                const val = document.getElementById('mapInput5').value.trim();
                 if (!val) return;
                 fetch('/app/submit-map?name=' + encodeURIComponent(val))
                     .then(() => {
