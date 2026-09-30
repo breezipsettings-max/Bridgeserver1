@@ -624,13 +624,18 @@ app.get('/json.txt', async (req, res) => {
         
         let translated = "";
         let sourceCode = "unknown";
-        if (translationData && translationData[0]) {
+        if (translationData && translationData[0] && Array.isArray(translationData[0])) {
             for (const part of translationData[0]) {
                 if (part && part[0]) {
                     translated += part[0];
                 }
             }
             sourceCode = translationData[2] || "unknown";
+        }
+        
+        // Fallback for low words or single letters where Google returns empty translation arrays
+        if (!translated.trim() && textToTranslate) {
+            translated = textToTranslate;
         }
 
         translationCache[cacheKey] = {
@@ -816,7 +821,7 @@ wss.on('connection', (ws) => {
                     let translated = "";
                     let sourceCode = "unknown";
                     
-                    if (translationData && translationData[0]) {
+                    if (translationData && translationData[0] && Array.isArray(translationData[0])) {
                         for (const part of translationData[0]) {
                             if (part && part[0]) {
                                 translated += part[0];
@@ -825,7 +830,9 @@ wss.on('connection', (ws) => {
                         sourceCode = translationData[2] || "unknown";
                     }
                     
-                    const finalTranslated = translated.trim();
+                    // Fallback for short/low words
+                    const finalTranslated = translated.trim() || textToTranslate;
+                    
                     translationCache[cacheKey] = {
                         translated: finalTranslated,
                         sourceCode: sourceCode,
@@ -974,7 +981,7 @@ wss.on('connection', (ws) => {
                         if (response.status !== 429) {
                             const translationData = await response.json();
                             let translated = "";
-                            if (translationData && translationData[0]) {
+                            if (translationData && translationData[0] && Array.isArray(translationData[0])) {
                                 for (const part of translationData[0]) {
                                     if (part && part[0]) {
                                         translated += part[0];
@@ -982,7 +989,10 @@ wss.on('connection', (ws) => {
                                 }
                                 sourceCode = translationData[2] || "unknown";
                             }
+                            
+                            // Fallback for short words
                             finalTranslated = translated.trim() || rawText;
+                            
                             translationCache[cacheKey] = {
                                 translated: finalTranslated,
                                 sourceCode: sourceCode,
