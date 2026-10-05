@@ -7,7 +7,7 @@ app.use(express.json());
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-const TelegramToken = "8890131325:AAG2SAW8cG1x8yH2U-uyHfPtrmsyNpcvb9w";
+const TelegramToken = "8890131325:AAGOcNqTMbB59CzeYldH8HHOrB8RwYsudK8";
 const TelegramChatId = "-5308116981";
 const PRIMARY_URL = "https://bridgeserver-0xlb.onrender.com/";
 const ADMIN_USER_ID = "9271966310";
