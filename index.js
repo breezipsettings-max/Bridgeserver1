@@ -583,13 +583,6 @@ const requestHeaders = {
     'Cache-Control': 'no-cache'
 };
 
-const bingRequestHeaders = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0',
-    'Accept': 'application/json, text/plain, */*',
-    'Accept-Language': 'en-US,en;q=0.5',
-    'Cache-Control': 'no-cache'
-};
-
 const interval = setInterval(() => {
     wss.clients.forEach((client) => {
         if (client.isAlive === false) return client.terminate();
@@ -674,21 +667,21 @@ app.get('/bing.txt', async (req, res) => {
         return res.send(JSON.stringify(translationCache[cacheKey].rawBody));
     }
     
-    const bingUrl = `https://r.microsofttranslator.com/translate?api-version=3.0&to=${encodeURIComponent(targetLang)}`;
+    const bingUrl = `https://microsoft.com/translator?to=${encodeURIComponent(targetLang)}&isEnterpriseClient=false`;
     
     try {
         const response = await fetch(bingUrl, {
             method: "POST",
             headers: { 
                 "Content-Type": "application/json",
-                ...bingRequestHeaders
+                ...requestHeaders
             },
             body: JSON.stringify([{ Text: textToTranslate }])
         });
 
         if (response.status === 429) {
-            console.error("CRITICAL: Bing rate limit hit on HTTP endpoint!");
-            return res.status(429).json({ error: "Proxy server rate-limited by Bing translation provider." });
+            console.error("CRITICAL: Microsoft rate limit hit on HTTP endpoint!");
+            return res.status(429).json({ error: "Proxy server rate-limited by Microsoft translation provider." });
         }
 
         const translationData = await response.json();
@@ -714,7 +707,7 @@ app.get('/bing.txt', async (req, res) => {
         res.send(JSON.stringify(translationData));
     } catch (e) {
         console.error("bing.txt endpoint error:", e);
-        res.status(500).json({ error: "Failed to fetch Bing translation format" });
+        res.status(500).json({ error: "Failed to fetch Microsoft translation format" });
     }
 });
 
@@ -874,18 +867,18 @@ wss.on('connection', (ws) => {
                     let sourceCode = "unknown";
 
                     if (response.status === 429) {
-                        console.warn("Google rate limit hit on translate_request. Falling back to Bing...");
-                        const bingUrl = `https://r.microsofttranslator.com/translate?api-version=3.0&to=${encodeURIComponent(targetLang)}`;
-                        const bingResponse = await fetch(bingUrl, {
+                        console.warn("Google rate limit hit on translate_request. Falling back to Microsoft...");
+                        const msUrl = `https://microsoft.com/translator?to=${encodeURIComponent(targetLang)}&isEnterpriseClient=false`;
+                        const msResponse = await fetch(msUrl, {
                             method: "POST",
-                            headers: { "Content-Type": "application/json", ...bingRequestHeaders },
+                            headers: { "Content-Type": "application/json", ...requestHeaders },
                             body: JSON.stringify([{ Text: textToTranslate }])
                         });
-                        if (bingResponse.ok) {
-                            const bingData = await bingResponse.json();
-                            if (Array.isArray(bingData)) {
-                                translated = bingData[0]?.translations?.[0]?.text || "";
-                                sourceCode = bingData[0]?.detectedLanguage?.language || "unknown";
+                        if (msResponse.ok) {
+                            const msData = await msResponse.json();
+                            if (Array.isArray(msData)) {
+                                translated = msData[0]?.translations?.[0]?.text || "";
+                                sourceCode = msData[0]?.detectedLanguage?.language || "unknown";
                             }
                         }
                     } else {
@@ -1049,18 +1042,18 @@ wss.on('connection', (ws) => {
                         const response = await fetch(translateUrl, { headers: requestHeaders });
                         
                         if (response.status === 429) {
-                            console.warn("Google rate limit hit on sign_broadcast. Falling back to Bing...");
-                            const bingUrl = `https://r.microsofttranslator.com/translate?api-version=3.0&to=${encodeURIComponent(targetLang)}`;
-                            const bingResponse = await fetch(bingUrl, {
+                            console.warn("Google rate limit hit on sign_broadcast. Falling back to Microsoft...");
+                            const msUrl = `https://microsoft.com/translator?to=${encodeURIComponent(targetLang)}&isEnterpriseClient=false`;
+                            const msResponse = await fetch(msUrl, {
                                 method: "POST",
-                                headers: { "Content-Type": "application/json", ...bingRequestHeaders },
+                                headers: { "Content-Type": "application/json", ...requestHeaders },
                                 body: JSON.stringify([{ Text: rawText }])
                             });
-                            if (bingResponse.ok) {
-                                const bingData = await bingResponse.json();
-                                if (Array.isArray(bingData)) {
-                                    let translated = bingData[0]?.translations?.[0]?.text || "";
-                                    sourceCode = bingData[0]?.detectedLanguage?.language || "unknown";
+                            if (msResponse.ok) {
+                                const msData = await msResponse.json();
+                                if (Array.isArray(msData)) {
+                                    let translated = msData[0]?.translations?.[0]?.text || "";
+                                    sourceCode = msData[0]?.detectedLanguage?.language || "unknown";
                                     finalTranslated = translated.trim() || rawText;
                                 }
                             }
