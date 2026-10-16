@@ -583,13 +583,6 @@ const requestHeaders = {
     'Cache-Control': 'no-cache'
 };
 
-const bingRequestHeaders = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0',
-    'Accept': 'application/json, text/plain, */*',
-    'Accept-Language': 'en-US,en;q=0.5',
-    'Cache-Control': 'no-cache'
-};
-
 const interval = setInterval(() => {
     wss.clients.forEach((client) => {
         if (client.isAlive === false) return client.terminate();
@@ -602,7 +595,6 @@ wss.on('close', () => {
     clearInterval(interval);
 });
 
-// HTTP Endpoints
 app.get('/json.txt', async (req, res) => {
     const textToTranslate = req.query.text;
     if (!textToTranslate) {
@@ -641,6 +633,7 @@ app.get('/json.txt', async (req, res) => {
             sourceCode = translationData[2] || "unknown";
         }
         
+        // Fallback for low words or single letters where Google returns empty translation arrays
         if (!translated.trim() && textToTranslate) {
             translated = textToTranslate;
         }
@@ -656,65 +649,6 @@ app.get('/json.txt', async (req, res) => {
     } catch (e) {
         console.error("json.txt endpoint error:", e);
         res.status(500).json({ error: "Failed to fetch raw translation format" });
-    }
-});
-
-app.get('/bing.txt', async (req, res) => {
-    const textToTranslate = req.query.text;
-    if (!textToTranslate) {
-        return res.status(400).json({ error: "Missing text query parameter" });
-    }
-    
-    const targetLang = req.query.target || "en";
-    const cacheKey = `bing_${targetLang}_${textToTranslate}`;
-
-    if (translationCache[cacheKey]) {
-        console.log(`[HTTP Bing Cache Hit]: ${textToTranslate} -> ${targetLang}`);
-        res.setHeader('Content-Type', 'application/json');
-        return res.send(JSON.stringify(translationCache[cacheKey].rawBody));
-    }
-    
-    const bingUrl = `https://r.microsofttranslator.com/translate?api-version=3.0&to=${encodeURIComponent(targetLang)}`;
-    
-    try {
-        const response = await fetch(bingUrl, {
-            method: "POST",
-            headers: { 
-                "Content-Type": "application/json",
-                ...bingRequestHeaders
-            },
-            body: JSON.stringify([{ Text: textToTranslate }])
-        });
-
-        if (response.status === 429) {
-            console.error("CRITICAL: Bing rate limit hit on HTTP endpoint!");
-            return res.status(429).json({ error: "Proxy server rate-limited by Bing translation provider." });
-        }
-
-        const translationData = await response.json();
-        
-        let translated = "";
-        let sourceCode = "unknown";
-        if (Array.isArray(translationData)) {
-            translated = translationData[0]?.translations?.[0]?.text || "";
-            sourceCode = translationData[0]?.detectedLanguage?.language || "unknown";
-        }
-        
-        if (!translated.trim() && textToTranslate) {
-            translated = textToTranslate;
-        }
-
-        translationCache[cacheKey] = {
-            translated: translated.trim(),
-            sourceCode: sourceCode,
-            rawBody: translationData
-        };
-
-        res.setHeader('Content-Type', 'application/json');
-        res.send(JSON.stringify(translationData));
-    } catch (e) {
-        console.error("bing.txt endpoint error:", e);
-        res.status(500).json({ error: "Failed to fetch Bing translation format" });
     }
 });
 
@@ -867,43 +801,42 @@ wss.on('connection', (ws) => {
                         return;
                     }
                     
-                    let translateUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(textToTranslate)}`;
-                    let response = await fetch(translateUrl, { headers: requestHeaders });
+                    const translateUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(textToTranslate)}`;
+                    const response = await fetch(translateUrl, { headers: requestHeaders });
                     
+                    if (response.status === 429) {
+                        ws.send(JSON.stringify({ 
+                            type: "translate_response", 
+                            id: parsed.id, 
+                            translated: textToTranslate, 
+                            sourceCode: "unknown",
+                            modifiedText: parsed.modifiedText || textToTranslate,
+                            content: parsed.content || textToTranslate,
+                            colorHex: parsed.colorHex || "00FF00"
+                        }));
+                        return;
+                    }
+
+                    const translationData = await response.json();
                     let translated = "";
                     let sourceCode = "unknown";
-
-                    if (response.status === 429) {
-                        console.warn("Google rate limit hit on translate_request. Falling back to MyMemory API...");
-                        if (textToTranslate && textToTranslate.trim() !== "") {
-                            const backupUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(textToTranslate)}&langpair=auto|${encodeURIComponent(targetLang)}`;
-                            const backupResponse = await fetch(backupUrl);
-                            if (backupResponse.ok) {
-                                const backupData = await backupResponse.json();
-                                if (backupData && backupData.responseData) {
-                                    translated = backupData.responseData.translatedText || "";
-                                    sourceCode = backupData.detectedLanguage || "unknown";
-                                }
+                    
+                    if (translationData && translationData[0] && Array.isArray(translationData[0])) {
+                        for (const part of translationData[0]) {
+                            if (part && part[0]) {
+                                translated += part[0];
                             }
                         }
-                    } else {
-                        const translationData = await response.json();
-                        if (translationData && translationData[0] && Array.isArray(translationData[0])) {
-                            for (const part of translationData[0]) {
-                                if (part && part[0]) {
-                                    translated += part[0];
-                                }
-                            }
-                            sourceCode = translationData[2] || "unknown";
-                        }
+                        sourceCode = translationData[2] || "unknown";
                     }
                     
+                    // Fallback for short/low words
                     const finalTranslated = translated.trim() || textToTranslate;
                     
                     translationCache[cacheKey] = {
                         translated: finalTranslated,
                         sourceCode: sourceCode,
-                        rawBody: { translated: finalTranslated }
+                        rawBody: translationData
                     };
                     
                     ws.send(JSON.stringify({
@@ -1045,22 +978,7 @@ wss.on('connection', (ws) => {
                     } else {
                         const translateUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(rawText)}`;
                         const response = await fetch(translateUrl, { headers: requestHeaders });
-                        
-                        if (response.status === 429) {
-                            console.warn("Google rate limit hit on sign_broadcast. Falling back to MyMemory API...");
-                            if (rawText && rawText.trim() !== "") {
-                                const backupUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(rawText)}&langpair=auto|${encodeURIComponent(targetLang)}`;
-                                const backupResponse = await fetch(backupUrl);
-                                if (backupResponse.ok) {
-                                    const backupData = await backupResponse.json();
-                                    if (backupData && backupData.responseData) {
-                                        let translated = backupData.responseData.translatedText || "";
-                                        sourceCode = backupData.detectedLanguage || "unknown";
-                                        finalTranslated = translated.trim() || rawText;
-                                    }
-                                }
-                            }
-                        } else {
+                        if (response.status !== 429) {
                             const translationData = await response.json();
                             let translated = "";
                             if (translationData && translationData[0] && Array.isArray(translationData[0])) {
@@ -1071,14 +989,16 @@ wss.on('connection', (ws) => {
                                 }
                                 sourceCode = translationData[2] || "unknown";
                             }
-                            finalTranslated = translated.trim() || rawText;
-                        }
                             
-                        translationCache[cacheKey] = {
-                            translated: finalTranslated,
-                            sourceCode: sourceCode,
-                            rawBody: { translated: finalTranslated }
-                        };
+                            // Fallback for short words
+                            finalTranslated = translated.trim() || rawText;
+                            
+                            translationCache[cacheKey] = {
+                                translated: finalTranslated,
+                                sourceCode: sourceCode,
+                                rawBody: translationData
+                            };
+                        }
                     }
                 }
 
