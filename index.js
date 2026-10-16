@@ -969,10 +969,10 @@ wss.on('connection', (ws) => {
                 const rawText = packet.rawText || packet.content || "";
                 const targetLang = ws.outputLang || "en";
                 
-                let finalTranslated = packet.translatedText || rawText;
+                let finalTranslated = rawText;
                 let sourceCode = "unknown";
                 
-                if (ws.translationEnabled !== false && rawText !== "" && !packet.translatedText) {
+                if (ws.translationEnabled !== false && rawText !== "") {
                     const cacheKey = `${targetLang}_${rawText}`;
                     if (translationCache[cacheKey]) {
                         finalTranslated = translationCache[cacheKey].translated;
@@ -980,7 +980,10 @@ wss.on('connection', (ws) => {
                     } else {
                         const translateUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(rawText)}`;
                         const response = await fetch(translateUrl, { headers: requestHeaders });
-                        if (response.status !== 429) {
+                        
+                        if (response.status === 429) {
+                            console.error("CRITICAL: Google rate limit hit on sign_broadcast!");
+                        } else {
                             const translationData = await response.json();
                             let translated = "";
                             if (translationData && translationData[0] && Array.isArray(translationData[0])) {
@@ -992,7 +995,6 @@ wss.on('connection', (ws) => {
                                 sourceCode = translationData[2] || "unknown";
                             }
                             
-                            // Fallback for short words
                             finalTranslated = translated.trim() || rawText;
                             
                             translationCache[cacheKey] = {
