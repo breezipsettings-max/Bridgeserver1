@@ -652,65 +652,6 @@ app.get('/json.txt', async (req, res) => {
     }
 });
 
-app.get('/bing.txt', async (req, res) => {
-    const textToTranslate = req.query.text;
-    if (!textToTranslate) {
-        return res.status(400).json({ error: "Missing text query parameter" });
-    }
-    
-    const targetLang = req.query.target || "en";
-    const cacheKey = `bing_${targetLang}_${textToTranslate}`;
-
-    if (translationCache[cacheKey]) {
-        console.log(`[HTTP Bing Cache Hit]: ${textToTranslate} -> ${targetLang}`);
-        res.setHeader('Content-Type', 'application/json');
-        return res.send(JSON.stringify(translationCache[cacheKey].rawBody));
-    }
-    
-    const bingUrl = `https://microsoft.com/translator?to=${encodeURIComponent(targetLang)}&isEnterpriseClient=false`;
-    
-    try {
-        const response = await fetch(bingUrl, {
-            method: "POST",
-            headers: { 
-                "Content-Type": "application/json",
-                ...requestHeaders
-            },
-            body: JSON.stringify([{ Text: textToTranslate }])
-        });
-
-        if (response.status === 429) {
-            console.error("CRITICAL: Microsoft rate limit hit on HTTP endpoint!");
-            return res.status(429).json({ error: "Proxy server rate-limited by Microsoft translation provider." });
-        }
-
-        const translationData = await response.json();
-        
-        let translated = "";
-        let sourceCode = "unknown";
-        if (Array.isArray(translationData)) {
-            translated = translationData[0]?.translations?.[0]?.text || "";
-            sourceCode = translationData[0]?.detectedLanguage?.language || "unknown";
-        }
-        
-        if (!translated.trim() && textToTranslate) {
-            translated = textToTranslate;
-        }
-
-        translationCache[cacheKey] = {
-            translated: translated.trim(),
-            sourceCode: sourceCode,
-            rawBody: translationData
-        };
-
-        res.setHeader('Content-Type', 'application/json');
-        res.send(JSON.stringify(translationData));
-    } catch (e) {
-        console.error("bing.txt endpoint error:", e);
-        res.status(500).json({ error: "Failed to fetch Microsoft translation format" });
-    }
-});
-
 wss.on('connection', (ws) => {
     ws.room = 'EN' || 'SYSTEM_ONLY';
     ws.playerName = 'Unknown';
@@ -867,18 +808,14 @@ wss.on('connection', (ws) => {
                     let sourceCode = "unknown";
 
                     if (response.status === 429) {
-                        console.warn("Google rate limit hit on translate_request. Falling back to Microsoft...");
-                        const msUrl = `https://microsoft.com/translator?to=${encodeURIComponent(targetLang)}&isEnterpriseClient=false`;
-                        const msResponse = await fetch(msUrl, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json", ...requestHeaders },
-                            body: JSON.stringify([{ Text: textToTranslate }])
-                        });
-                        if (msResponse.ok) {
-                            const msData = await msResponse.json();
-                            if (Array.isArray(msData)) {
-                                translated = msData[0]?.translations?.[0]?.text || "";
-                                sourceCode = msData[0]?.detectedLanguage?.language || "unknown";
+                        console.warn("Google rate limit hit on translate_request. Falling back to MyMemory API...");
+                        const backupUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(textToTranslate)}&langpair=auto|${encodeURIComponent(targetLang)}`;
+                        const backupResponse = await fetch(backupUrl);
+                        if (backupResponse.ok) {
+                            const backupData = await backupResponse.json();
+                            if (backupData && backupData.responseData) {
+                                translated = backupData.responseData.translatedText || "";
+                                sourceCode = backupData.detectedLanguage || "unknown";
                             }
                         }
                     } else {
@@ -1042,18 +979,14 @@ wss.on('connection', (ws) => {
                         const response = await fetch(translateUrl, { headers: requestHeaders });
                         
                         if (response.status === 429) {
-                            console.warn("Google rate limit hit on sign_broadcast. Falling back to Microsoft...");
-                            const msUrl = `https://microsoft.com/translator?to=${encodeURIComponent(targetLang)}&isEnterpriseClient=false`;
-                            const msResponse = await fetch(msUrl, {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json", ...requestHeaders },
-                                body: JSON.stringify([{ Text: rawText }])
-                            });
-                            if (msResponse.ok) {
-                                const msData = await msResponse.json();
-                                if (Array.isArray(msData)) {
-                                    let translated = msData[0]?.translations?.[0]?.text || "";
-                                    sourceCode = msData[0]?.detectedLanguage?.language || "unknown";
+                            console.warn("Google rate limit hit on sign_broadcast. Falling back to MyMemory API...");
+                            const backupUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(rawText)}&langpair=auto|${encodeURIComponent(targetLang)}`;
+                            const backupResponse = await fetch(backupUrl);
+                            if (backupResponse.ok) {
+                                const backupData = await backupResponse.json();
+                                if (backupData && backupData.responseData) {
+                                    let translated = backupData.responseData.translatedText || "";
+                                    sourceCode = backupData.detectedLanguage || "unknown";
                                     finalTranslated = translated.trim() || rawText;
                                 }
                             }
