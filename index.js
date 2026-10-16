@@ -947,6 +947,8 @@ wss.on('connection', (ws) => {
         if (msgStr.includes("update_lang")) {
             try {
                 const packet = parsed || JSON.parse(msgStr);
+                if (packet.playerName) ws.playerName = packet.playerName;
+                if (packet.userId) ws.userId = Number(packet.userId);
                 if (packet.target) {
                     ws.outputLang = packet.target;
                     console.log(`[Lang Sync] Player ${ws.playerName || "Unknown"} updated output lang to: [${ws.outputLang}]`);
