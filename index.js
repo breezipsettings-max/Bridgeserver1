@@ -875,13 +875,15 @@ wss.on('connection', (ws) => {
 
                     if (response.status === 429) {
                         console.warn("Google rate limit hit on translate_request. Falling back to MyMemory API...");
-                        const backupUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(textToTranslate)}&langpair=auto|${encodeURIComponent(targetLang)}`;
-                        const backupResponse = await fetch(backupUrl);
-                        if (backupResponse.ok) {
-                            const backupData = await backupResponse.json();
-                            if (backupData && backupData.responseData) {
-                                translated = backupData.responseData.translatedText || "";
-                                sourceCode = backupData.detectedLanguage || "unknown";
+                        if (textToTranslate && textToTranslate.trim() !== "") {
+                            const backupUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(textToTranslate)}&langpair=auto|${encodeURIComponent(targetLang)}`;
+                            const backupResponse = await fetch(backupUrl);
+                            if (backupResponse.ok) {
+                                const backupData = await backupResponse.json();
+                                if (backupData && backupData.responseData) {
+                                    translated = backupData.responseData.translatedText || "";
+                                    sourceCode = backupData.detectedLanguage || "unknown";
+                                }
                             }
                         }
                     } else {
@@ -1046,14 +1048,16 @@ wss.on('connection', (ws) => {
                         
                         if (response.status === 429) {
                             console.warn("Google rate limit hit on sign_broadcast. Falling back to MyMemory API...");
-                            const backupUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(rawText)}&langpair=auto|${encodeURIComponent(targetLang)}`;
-                            const backupResponse = await fetch(backupUrl);
-                            if (backupResponse.ok) {
-                                const backupData = await backupResponse.json();
-                                if (backupData && backupData.responseData) {
-                                    let translated = backupData.responseData.translatedText || "";
-                                    sourceCode = backupData.detectedLanguage || "unknown";
-                                    finalTranslated = translated.trim() || rawText;
+                            if (rawText && rawText.trim() !== "") {
+                                const backupUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(rawText)}&langpair=auto|${encodeURIComponent(targetLang)}`;
+                                const backupResponse = await fetch(backupUrl);
+                                if (backupResponse.ok) {
+                                    const backupData = await backupResponse.json();
+                                    if (backupData && backupData.responseData) {
+                                        let translated = backupData.responseData.translatedText || "";
+                                        sourceCode = backupData.detectedLanguage || "unknown";
+                                        finalTranslated = translated.trim() || rawText;
+                                    }
                                 }
                             }
                         } else {
