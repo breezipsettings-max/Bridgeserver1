@@ -583,6 +583,13 @@ const requestHeaders = {
     'Cache-Control': 'no-cache'
 };
 
+const bingRequestHeaders = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0',
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Language': 'en-US,en;q=0.5',
+    'Cache-Control': 'no-cache'
+};
+
 const interval = setInterval(() => {
     wss.clients.forEach((client) => {
         if (client.isAlive === false) return client.terminate();
@@ -649,6 +656,65 @@ app.get('/json.txt', async (req, res) => {
     } catch (e) {
         console.error("json.txt endpoint error:", e);
         res.status(500).json({ error: "Failed to fetch raw translation format" });
+    }
+});
+
+app.get('/bing.txt', async (req, res) => {
+    const textToTranslate = req.query.text;
+    if (!textToTranslate) {
+        return res.status(400).json({ error: "Missing text query parameter" });
+    }
+    
+    const targetLang = req.query.target || "en";
+    const cacheKey = `bing_${targetLang}_${textToTranslate}`;
+
+    if (translationCache[cacheKey]) {
+        console.log(`[HTTP Bing Cache Hit]: ${textToTranslate} -> ${targetLang}`);
+        res.setHeader('Content-Type', 'application/json');
+        return res.send(JSON.stringify(translationCache[cacheKey].rawBody));
+    }
+    
+    const bingUrl = `https://r.microsofttranslator.com/translate?api-version=3.0&to=${encodeURIComponent(targetLang)}`;
+    
+    try {
+        const response = await fetch(bingUrl, {
+            method: "POST",
+            headers: { 
+                "Content-Type": "application/json",
+                ...bingRequestHeaders
+            },
+            body: JSON.stringify([{ Text: textToTranslate }])
+        });
+
+        if (response.status === 429) {
+            console.error("CRITICAL: Bing rate limit hit on HTTP endpoint!");
+            return res.status(429).json({ error: "Proxy server rate-limited by Bing translation provider." });
+        }
+
+        const translationData = await response.json();
+        
+        let translated = "";
+        let sourceCode = "unknown";
+        if (Array.isArray(translationData)) {
+            translated = translationData[0]?.translations?.[0]?.text || "";
+            sourceCode = translationData[0]?.detectedLanguage?.language || "unknown";
+        }
+        
+        if (!translated.trim() && textToTranslate) {
+            translated = textToTranslate;
+        }
+
+        translationCache[cacheKey] = {
+            translated: translated.trim(),
+            sourceCode: sourceCode,
+            rawBody: translationData
+        };
+
+        res.setHeader('Content-Type', 'application/json');
+        res.send(JSON.stringify(translationData));
+    } catch (e) {
+        console.error("bing.txt endpoint error:", e);
+        res.status(500).json({ error: "Failed to fetch Bing translation format" });
     }
 });
 
