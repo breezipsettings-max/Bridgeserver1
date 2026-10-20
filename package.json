@@ -7,6 +7,9 @@
   },
   "dependencies": {
     "express": "^4.19.2",
-    "ws": "^8.16.0"
+    "ws": "^8.16.0",
+    "http-proxy-agent": "^7.0.2",
+    "socks-proxy-agent": "^8.0.3",
+    "@vitalets/google-translate-api": "^9.2.0"
   }
 }
