@@ -1,6 +1,9 @@
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
+const { HttpProxyAgent } = require('http-proxy-agent');
+const { SocksProxyAgent } = require('socks-proxy-agent');
+const { translate } = require('@vitalets/google-translate-api');
 const app = express();
 app.use(express.json());
 
@@ -15,6 +18,61 @@ const ADMIN_USER_ID = "9271966310";
 const activeSessions = {};
 const blacklistedUsers = new Map();
 
+let proxyPool = [];
+
+// Automatically fetches the raw text proxy list from ProxyScrape and parses it line-by-line
+async function loadPublicProxies() {
+    try {
+        const res = await fetch('https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&proxy_format=protocolipport&format=text');
+        const textData = await res.text();
+        
+        proxyPool = textData
+            .split('\n')
+            .map(line => line.trim())
+            .filter(line => line.length > 0 && line.includes('://'))
+            .map(line => {
+                const [protocol] = line.split('://');
+                return {
+                    url: line,
+                    protocol: protocol.toLowerCase()
+                };
+            });
+        
+        console.log(`[Proxy Setup] Loaded ${proxyPool.length} active text-formatted proxy routing nodes.`);
+    } catch (err) {
+        console.error("[Proxy Setup] Failed to fetch proxy text list, running raw:", err.message);
+        proxyPool = [];
+    }
+}
+loadPublicProxies();
+
+// Translation wrapper that automatically picks a random proxy and hops IPs if a 429 occurs
+async function translateWithProxyFallback(text, targetLang) {
+    let options = { to: targetLang };
+    
+    if (proxyPool.length > 0) {
+        const randomProxyObj = proxyPool[Math.floor(Math.random() * proxyPool.length)];
+        
+        if (randomProxyObj.protocol.startsWith('socks')) {
+            options.fetchOptions = { agent: new SocksProxyAgent(randomProxyObj.url) };
+        } else {
+            options.fetchOptions = { agent: new HttpProxyAgent(randomProxyObj.url) };
+        }
+    }
+
+    try {
+        const response = await translate(text, options);
+        return { text: response.text, sourceCode: response.from?.language?.iso || "unknown" };
+    } catch (err) {
+        console.warn(`[Translation Warning] Proxy failed or 429 hit. Trying native server IP...`);
+        try {
+            const nativeResponse = await translate(text, { to: targetLang });
+            return { text: nativeResponse.text, sourceCode: nativeResponse.from?.language?.iso || "unknown" };
+        } catch (nativeErr) {
+            return { text: text, sourceCode: "unknown" };
+        }
+    }
+}
 
 function escapeHTML(str) {
     return String(str)
